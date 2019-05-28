@@ -28,11 +28,11 @@ from loss import *
 from homography_warping import get_homographies, homography_warping
 
 # paths
-tf.app.flags.DEFINE_string('dtu_data_root', '/data/dtu/', 
+tf.app.flags.DEFINE_string('dtu_data_root', '/xdata/wuyk/mvs_training/dtu/', 
                            """Path to dtu dataset.""")
-tf.app.flags.DEFINE_string('log_dir', '/data/tf_log',
+tf.app.flags.DEFINE_string('log_dir', '/xdata/wuyk/tf_data2/tf_log',
                            """Path to store the log.""")
-tf.app.flags.DEFINE_string('model_dir', '/data/tf_model',
+tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data2/tf_model',
                            """Path to save the model.""")
 tf.app.flags.DEFINE_boolean('train_dtu', True, 
                             """Whether to train.""")
