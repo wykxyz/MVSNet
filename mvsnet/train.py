@@ -36,7 +36,7 @@ tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data2/tf_model',
                            """Path to save the model.""")
 tf.app.flags.DEFINE_boolean('train_dtu', True, 
                             """Whether to train.""")
-tf.app.flags.DEFINE_boolean('use_pretrain', True, 
+tf.app.flags.DEFINE_boolean('use_pretrain', False, 
                             """Whether to train.""")
 tf.app.flags.DEFINE_integer('ckpt_step', 0,
                             """ckpt step.""")
