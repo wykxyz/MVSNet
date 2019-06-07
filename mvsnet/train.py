@@ -30,9 +30,9 @@ from homography_warping import get_homographies, homography_warping
 # paths
 tf.app.flags.DEFINE_string('dtu_data_root', '/xdata/wuyk/mvs_training/dtu/', 
                            """Path to dtu dataset.""")
-tf.app.flags.DEFINE_string('log_dir', '/xdata/wuyk/tf_data2/tf_log',
+tf.app.flags.DEFINE_string('log_dir', '/xdata/wuyk/tf_data4-validate/tf_log',
                            """Path to store the log.""")
-tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data2/tf_model',
+tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data4-validate/tf_model',
                            """Path to save the model.""")
 tf.app.flags.DEFINE_boolean('train_dtu', True, 
                             """Whether to train.""")
@@ -62,13 +62,13 @@ tf.app.flags.DEFINE_boolean('refinement', False,
                            """Whether to apply depth map refinement for 3DCNNs""")
 
 # training parameters
-tf.app.flags.DEFINE_integer('num_gpus', 1, 
+tf.app.flags.DEFINE_integer('num_gpus', 3, 
                             """Number of GPUs.""")
 tf.app.flags.DEFINE_integer('batch_size', 1, 
                             """Training batch size.""")
 tf.app.flags.DEFINE_integer('epoch', 6, 
                             """Training epoch number.""")
-tf.app.flags.DEFINE_float('val_ratio', 0, 
+tf.app.flags.DEFINE_float('val_ratio', 0.2, 
                           """Ratio of validation set when splitting dataset.""")
 tf.app.flags.DEFINE_float('base_lr', 0.001,
                           """Base learning rate.""")
