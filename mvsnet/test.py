@@ -26,9 +26,9 @@ from loss import *
 tf.app.flags.DEFINE_string('dense_folder', None, 
                            """Root path to dense folder.""")
 tf.app.flags.DEFINE_string('model_dir', 
-                           '/data/tf_model',
+                           '/xdata/wuyk/tf_data2/tf_model',
                            """Path to restore the model.""")
-tf.app.flags.DEFINE_integer('ckpt_step', 100000,
+tf.app.flags.DEFINE_integer('ckpt_step', 135000,
                             """ckpt step.""")
 
 # input parameters
