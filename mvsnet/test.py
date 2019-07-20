@@ -26,13 +26,13 @@ from loss import *
 tf.app.flags.DEFINE_string('dense_folder', None, 
                            """Root path to dense folder.""")
 tf.app.flags.DEFINE_string('model_dir', 
-                           '/xdata/wuyk/tf_data2/tf_model',
+                           '/xdata/wuyk/tf_model',
                            """Path to restore the model.""")
-tf.app.flags.DEFINE_integer('ckpt_step', 135000,
+tf.app.flags.DEFINE_integer('ckpt_step', 100000,
                             """ckpt step.""")
 
 # input parameters
-tf.app.flags.DEFINE_integer('view_num', 5,
+tf.app.flags.DEFINE_integer('view_num', 7,
                             """Number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 256, 
                             """Maximum depth step when testing.""")
@@ -63,7 +63,7 @@ FLAGS = tf.app.flags.FLAGS
 
 class MVSGenerator:
     """ data generator class, tf only accept generator without param """
-    def __init__(self, sample_list, view_num):
+    def __init__(self, sample_list, view_num): 
         self.sample_list = sample_list
         self.view_num = view_num
         self.sample_num = len(sample_list)
@@ -195,8 +195,7 @@ def mvsnet_pipeline(mvs_list):
     # depth map inference using GRU
     elif FLAGS.regularization == 'GRU':
         init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
-            depth_num, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
-
+            256, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
     # init option
     init_op = tf.global_variables_initializer()
     var_init_op = tf.local_variables_initializer()
@@ -250,6 +249,10 @@ def mvsnet_pipeline(mvs_list):
             prob_map_path = output_folder + ('/%08d_prob.pfm' % out_index)
             out_ref_image_path = output_folder + ('/%08d.jpg' % out_index)
             out_ref_cam_path = output_folder + ('/%08d.txt' % out_index)
+            out_ref_image = cv2.resize(out_ref_image, (out_ref_image.shape[1] * 2, out_ref_image.shape[0] * 2))
+            out_ref_cam[1, :2, :3] *= 2.0
+            out_init_depth_image = cv2.resize(out_init_depth_image, (out_ref_image.shape[1], out_ref_image.shape[0]))
+            out_prob_map = cv2.resize(out_prob_map, (out_ref_image.shape[1], out_ref_image.shape[0]))
 
             # save output
             write_pfm(init_depth_map_path, out_init_depth_image)
