@@ -1042,13 +1042,13 @@ def inference_prob_recurrent_1(images, cams, depth_num, depth_start, depth_inter
 
     # image feature extraction
     if is_master_gpu:
-        ref_tower = SNetDS2GN({'data': ref_image}, is_training=True, reuse=False)
+        ref_tower = SNetDS2GN_1({'data': ref_image}, is_training=True, reuse=False)
     else:
-        ref_tower = SNetDS2GN({'data': ref_image}, is_training=True, reuse=True)
+        ref_tower = SNetDS2GN_1({'data': ref_image}, is_training=True, reuse=True)
     view_towers = []
     for view in range(1, FLAGS.view_num):
         view_image = tf.squeeze(tf.slice(images, [0, view, 0, 0, 0], [-1, 1, -1, -1, -1]), axis=1)
-        view_tower = SNetDS2GN({'data': view_image}, is_training=True, reuse=True)
+        view_tower = SNetDS2GN_1({'data': view_image}, is_training=True, reuse=True)
         view_towers.append(view_tower)
 
     # get all homographies
@@ -1069,7 +1069,7 @@ def inference_prob_recurrent_1(images, cams, depth_num, depth_start, depth_inter
 
     gru1_filters = 16
     gru2_filters = 4
-    gru3_filters = 2
+    gru3_filters = 4
     feature_shape = [FLAGS.batch_size, FLAGS.max_h/4, FLAGS.max_w/4, 16]
     gru_input_shape = [feature_shape[1], feature_shape[2]]  
     state3 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru3_filters])
@@ -1078,8 +1078,8 @@ def inference_prob_recurrent_1(images, cams, depth_num, depth_start, depth_inter
     cell0 = tf.nn.rnn_cell.GRUCell(num_units=8, reuse=tf.AUTO_REUSE,name='gru_1')
     cell1 = tf.nn.rnn_cell.GRUCell(num_units=4, reuse=tf.AUTO_REUSE,name='gru_2')
    
-    state0 = tf.zeros([FLAGS.batch_size * FLAGS.max_h / 4 * FLAGS.max_w / 4, 8])
-    state1 = tf.zeros([FLAGS.batch_size * FLAGS.max_h / 4 * FLAGS.max_w / 4, 4])
+    state0 = tf.zeros([FLAGS.batch_size * FLAGS.max_h/4 * FLAGS.max_w/4, 8])
+    state1 = tf.zeros([FLAGS.batch_size * FLAGS.max_h/4 * FLAGS.max_w/4 , 4])
 
     with tf.name_scope('cost_volume_homography'):
 
@@ -1107,14 +1107,14 @@ def inference_prob_recurrent_1(images, cams, depth_num, depth_start, depth_inter
                 ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
             ave_feature = ave_feature / FLAGS.view_num
             ave_feature2 = ave_feature2 / FLAGS.view_num
-            cost=ave_feature2 - tf.square(ave_feature) #= ave_feature2 - tf.square(ave_feature)
+            cost=  tf.square(ave_feature) -ave_feature2#= ave_feature2 - tf.square(ave_feature)
             # gru
             # reg_cost1, state1 = conv_gru1(-cost, state1, scope='conv_gru1')
             # reg_cost2, state2 = conv_gru2(reg_cost1, state2, scope='conv_gru2')
-            cost = tf.reshape(-cost, [-1, 1, 16])
+            _1d_cost = tf.reshape(cost, [-1, 1, 16])
             # cost, state0 = tf.nn.dynamic_rnn(cell=cell0, inputs=-cost, initial_state=state0)
-            _1d_cost, state0 = tf.nn.dynamic_rnn(cell=cell0, inputs=cost, initial_state=state0)
-            _1d_cost, state0 = tf.nn.dynamic_rnn(cell=cell1, inputs=_1d_cost, initial_state=state1)
+            _1d_cost, state0 = tf.nn.dynamic_rnn(cell=cell0, inputs=_1d_cost, initial_state=state0)
+            _1d_cost, state1 = tf.nn.dynamic_rnn(cell=cell1, inputs=_1d_cost, initial_state=state1)
             _1d_cost=tf.reshape(_1d_cost,[FLAGS.batch_size,FLAGS.max_h/4,FLAGS.max_w/4,4])
             _2d_cost, state3 = conv_gru3(cost, state3, scope='conv_gru3')
             

@@ -30,7 +30,7 @@ from loss import *
 from homography_warping import get_homographies, homography_warping
 # custom_module = high_dim_filter_loader.custom_module
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # paths
 
 tf.app.flags.DEFINE_string('dtu_data_root', '/home/haibao637/data/mvs_training/dtu/',
@@ -366,7 +366,7 @@ def train(traning_list):
                     if FLAGS.regularization == 'GRU':
 
                         # probability volume
-                        prob_volume = inference_prob_recurrent(
+                        prob_volume = inference_prob_recurrent_1(
                             images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
 
                         
@@ -428,6 +428,7 @@ def train(traning_list):
         # initialization option
         init_op = tf.global_variables_initializer()
         config = tf.ConfigProto(allow_soft_placement=True)
+      
         config.gpu_options.allow_growth = True
         # config.gpu_options.set_per_process_memory_growth()
         with tf.Session(config=config) as sess:

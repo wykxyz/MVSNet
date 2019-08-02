@@ -97,8 +97,8 @@ def normal_loss(depth_map,depth_image,K):
     
     normal_map=tf.cross(pixel_map_raw_x,pixel_map_raw_y)#b,h,w,3
     normal_gt=tf.cross(pixel_gt_raw_x,pixel_gt_raw_y)#b,h,w,3
-    normal_map=tf.math.l2_normalize(normal_map,axis=-1,epsilon=1e-12)
-    normal_gt=tf.math.l2_normalize(normal_gt,axis=-1,epsilon=1e-12)
+    normal_map=tf.nn.l2_normalize(normal_map,axis=-1,epsilon=1e-12)
+    normal_gt=tf.nn.l2_normalize(normal_gt,axis=-1,epsilon=1e-12)
     loss_map=tf.reduce_sum((normal_map-normal_gt)**2,axis=-1,keepdims=True)
     mask_true=tf.cast(depth_image>0.0,tf.float32)
     valid_pixel_num = tf.reduce_sum(mask_true) + 1e-7
