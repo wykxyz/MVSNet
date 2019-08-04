@@ -144,7 +144,7 @@ class SNetDS2GN_1(Network):
 
     def setup(self):
         print ('2D SNet with 32 channel output')
-        base_filter = 4
+        base_filter = 8
         (self.feed('data')
          .conv_bn(3,base_filter,1,dilation_rate=1,center=True,scale=True,name="sconv0_0")
          .conv_bn(3, base_filter*2, 1,dilation_rate=1, center=True, scale=True, name="sconv0_1")
@@ -165,7 +165,7 @@ class SNetDS2GN_1(Network):
         )
         (self.feed('sconv0_3','sconv1_3','sconv2_3','sconv3_3')
         .concat(axis=-1,name='sconcat')
-        .conv(3,base_filter*4,1,relu=False,name='sconv4_0')
+        .conv(3,base_filter*2,1,relu=False,name='sconv4_0')
         )
 
 

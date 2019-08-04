@@ -15,7 +15,7 @@ import sys
 # gpus = ["0"]
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import visdom
 import torch
 import torch.utils.data.dataset as dataset
@@ -214,7 +214,7 @@ sys.path.append("../")
         new_coords[..., :2] = new_coords[..., :2] / new_coords[..., 2].unsqueeze(-1)
         distance2 = (new_coords[..., :2] - coords[..., :2].cuda()) ** 2
         ref_depth_map = ref_depth_map.cuda()
-        mask = ((torch.sqrt(torch.sum(distance2, dim=-1)) < 1.0).reshape(-1, batch_size,1, height, width)) & (
+        mask = ((torch.sqrt(torch.sum(distance2, dim=-1)) < 0.5).reshape(-1, batch_size,1, height, width)) & (
         (torch.abs(z1 - ref_depth_map) *2/torch.abs(ref_depth_map+z1)< 0.01)) & (z1 > 0) & (ref_depth_map > 0.0)
         # mask=((torch.abs(z1-ref_depth_map)<0.01))
         mask = torch.sum(mask.type(torch.float32), dim=0) >= 3.0
@@ -309,6 +309,7 @@ class PostDataset(dataset.Dataset):
             cam = load_cam(open(cam_path, 'r'))
             cams.append(cam)
             depth_map = load_pfm(open(depth_path))
+            # depth_map=cv2.bilateralFilter(depth_map,10, 10 * 2, 10 / 2)
             depth_maps.append(depth_map)
             color_map = cv2.imread(color_path)
             color_map=cv2.cvtColor(color_map,cv2.COLOR_RGB2GRAY)

@@ -48,7 +48,7 @@ tf.app.flags.DEFINE_string('model_dir', os.path.join('/home/haibao637/data/tf_mo
 						   """Path to save the model.""")
 tf.app.flags.DEFINE_boolean('train_dtu', True,
                             """Whether to train.""")
-tf.app.flags.DEFINE_boolean('use_pretrain', True,
+tf.app.flags.DEFINE_boolean('use_pretrain', False,
                             """Whether to train.""")
 tf.app.flags.DEFINE_integer('ckpt_step', 400000,
                             """ckpt step.""")
@@ -371,26 +371,26 @@ def train(traning_list):
 
                         
 
-                        if FLAGS.inverse_depth:
-                            inv_depth_start = tf.reshape(tf.div(1.0, depth_start),[])
-                            inv_depth_end = tf.reshape(tf.div(1.0, depth_end),[])
-                            # inv_depth_interval = (inv_depth_start - inv_depth_end) / (tf.cast(FLAGS.max_d, 'float32') - 1)
-                            inv_depth = tf.reshape(tf.lin_space(inv_depth_start, inv_depth_end, FLAGS.max_d),[-1,FLAGS.max_d,1,1,1])
-                            inv_depth=tf.reduce_sum(inv_depth*prob_volume,axis=1)#b,h,w,1
-                            depth_map = tf.div(1.0, inv_depth)
-                        else:
-                            depth_map=tf.reshape(tf.linspace(depth_start,depth_end,FLAGS.max_d),[-1,FLAGS.max_d,1,1,1,])
-                            depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
+                        # if FLAGS.inverse_depth:
+                        #     inv_depth_start = tf.reshape(tf.div(1.0, depth_start),[])
+                        #     inv_depth_end = tf.reshape(tf.div(1.0, depth_end),[])
+                        #     # inv_depth_interval = (inv_depth_start - inv_depth_end) / (tf.cast(FLAGS.max_d, 'float32') - 1)
+                        #     inv_depth = tf.reshape(tf.lin_space(inv_depth_start, inv_depth_end, FLAGS.max_d),[-1,FLAGS.max_d,1,1,1])
+                        #     inv_depth=tf.reduce_sum(inv_depth*prob_volume,axis=1)#b,h,w,1
+                        #     depth_map = tf.div(1.0, inv_depth)
+                        # else:
+                        #     depth_map=tf.reshape(tf.linspace(depth_start,depth_end,FLAGS.max_d),[-1,FLAGS.max_d,1,1,1,])
+                        #     depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
 
-                        loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
-                        K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
-                        loss_1=normal_loss(depth_map,depth_image,K)
-                        loss+=loss_1
+                        # loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
+                        # K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
+                        # loss_1=normal_loss(depth_map,depth_image,K)
+                        # loss+=loss_1
                       
                         # classification loss
-                        # loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
-                        #     mvsnet_classification_loss(
-                        #         prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
 
                     # retain the summaries from the final tower.
 

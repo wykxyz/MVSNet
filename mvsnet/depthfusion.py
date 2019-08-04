@@ -24,7 +24,7 @@ import numpy as np
 from utils import *
 import imageio
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import visdom
 vis=visdom.Visdom()
 def read_gipuma_dmb(path):
@@ -245,7 +245,7 @@ def probability_filter(dense_folder, prob_threshold):
     image_names = os.listdir(image_folder)
     for image_name in image_names:
         image_prefix = os.path.splitext(image_name)[0]
-        init_depth_map_path = os.path.join(depth_folder, image_prefix+'_init.pfm')
+        init_depth_map_path = os.path.join(depth_folder, image_prefix+'_filter.pfm')
         prob_map_path = os.path.join(depth_folder, image_prefix+'_prob.pfm')
         out_depth_map_path = os.path.join(depth_folder, image_prefix+'_prob_filtered.pfm')
 
@@ -294,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument('--fusibile_exe_path', type=str, default = '/home/haibao637/data/fusibile/build/fusibile')
     parser.add_argument('--prob_threshold', type=float, default = '0.15')
     parser.add_argument('--disp_threshold', type=float, default = '0.25')
-    parser.add_argument('--num_consistent', type=float, default = '3')
+    parser.add_argument('--num_consistent', type=float, default = '1')
     parser.add_argument('--scale', type=float, default='1')
     args = parser.parse_args()
 
