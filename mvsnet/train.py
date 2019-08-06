@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 Copyright 2019, Yao Yao, HKUST.
 Training script.
@@ -31,38 +30,38 @@ from homography_warping import get_homographies, homography_warping
 tf.app.flags.DEFINE_string('dtu_data_root', '/xdata/wuyk/mvs_training/dtu/', 
                            """Path to dtu dataset.""")
 tf.app.flags.DEFINE_string('log_dir', '/xdata/wuyk/tf_data4-validate/tf_log',
-                           """Path to store the log.""")
+                           """path to store the log.""")
 tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data4-validate/tf_model',
-                           """Path to save the model.""")
+                           """path to save the model.""")
 tf.app.flags.DEFINE_boolean('train_dtu', True, 
-                            """Whether to train.""")
+                            """whether to train.""")
 tf.app.flags.DEFINE_boolean('use_pretrain', False, 
-                            """Whether to train.""")
+                            """whether to train.""")
 tf.app.flags.DEFINE_integer('ckpt_step', 0,
                             """ckpt step.""")
 
 # input parameters
-tf.app.flags.DEFINE_integer('view_num', 5, 
-                            """Number of images (1 ref image and view_num - 1 view images).""")
+tf.app.flags.DEFINE_integer('view_num', 3, 
+                            """number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 192, 
-                            """Maximum depth step when training.""")
+                            """maximum depth step when training.""")
 tf.app.flags.DEFINE_integer('max_w', 640, 
-                            """Maximum image width when training.""")
+                            """maximum image width when training.""")
 tf.app.flags.DEFINE_integer('max_h', 512, 
-                            """Maximum image height when training.""")
+                            """maximum image height when training.""")
 tf.app.flags.DEFINE_float('sample_scale', 0.25, 
-                            """Downsample scale for building cost volume.""")
+                            """downsample scale for building cost volume.""")
 tf.app.flags.DEFINE_float('interval_scale', 1.06, 
-                            """Downsample scale for building cost volume.""")
+                            """downsample scale for building cost volume.""")
 
 # network architectures
-tf.app.flags.DEFINE_string('regularization', 'GRU',
-                           """Regularization method.""")
+tf.app.flags.DEFINE_string('regularization', 'gru',
+                           """regularization method.""")
 tf.app.flags.DEFINE_boolean('refinement', False,
-                           """Whether to apply depth map refinement for 3DCNNs""")
+                           """whether to apply depth map refinement for 3dcnns""")
 
 # training parameters
-tf.app.flags.DEFINE_integer('num_gpus', 3, 
+tf.app.flags.DEFINE_integer('num_gpus', 1, 
                             """Number of GPUs.""")
 tf.app.flags.DEFINE_integer('batch_size', 1, 
                             """Training batch size.""")
@@ -83,6 +82,7 @@ tf.app.flags.DEFINE_float('gamma', 0.9,
 
 
 FLAGS = tf.app.flags.FLAGS
+print(FLAGS)
 
 class MVSGenerator:
     """ data generator class, tf only accept generator without param """
@@ -175,6 +175,13 @@ def train(traning_list):
         training_sample_size = training_sample_size * 2
     print ('sample number: ', training_sample_size)
 
+    if not os.path.exists(FLAGS.log_dir):
+        print('create ', FLAGS.log_dir)
+        os.makedirs(FLAGS.log_dir)
+    if not os.path.exists(FLAGS.model_dir):
+        print('create ', FLAGS.model_dir)
+        os.makedirs(FLAGS.model_dir)
+    
     with tf.Graph().as_default(), tf.device('/cpu:0'): 
 
         ########## data iterator #########
@@ -234,11 +241,43 @@ def train(traning_list):
                         loss1, less_one_accuracy, less_three_accuracy = mvsnet_regression_loss(
                             refined_depth_map, depth_image, depth_interval)
                         loss = (loss0 + loss1) / 2
+                    elif FLAGS.regularization == '3DCNNs_W':
+
+                        # initial depth map
+                        depth_map, prob_map = inference_cos_weighted(
+                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+
+                        # refinement
+                        if FLAGS.refinement:
+                            ref_image = tf.squeeze(
+                                tf.slice(images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, 3]), axis=1)
+                            refined_depth_map = depth_refine(depth_map, ref_image,
+                                    FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+                        else:
+                            refined_depth_map = depth_map
+
+                        # regression loss
+                        loss0, less_one_temp, less_three_temp = mvsnet_regression_loss(
+                            depth_map, depth_image, depth_interval)
+                        loss1, less_one_accuracy, less_three_accuracy = mvsnet_regression_loss(
+                            refined_depth_map, depth_image, depth_interval)
+                        loss = (loss0 + loss1) / 2
 
                     elif FLAGS.regularization == 'GRU':
 
                         # probability volume
                         prob_volume = inference_prob_recurrent(
+                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+
+                        # classification loss
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+
+                    elif FLAGS.regularization == 'GRU_W':
+
+                        # probability volume
+                        prob_volume = inference_prob_recurrent_w(
                             images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
 
                         # classification loss
@@ -330,7 +369,7 @@ def train(traning_list):
                     if (total_step % FLAGS.snapshot == 0 or step == (training_sample_size - 1)):
                         model_folder = os.path.join(FLAGS.model_dir, FLAGS.regularization)
                         if not os.path.exists(model_folder):
-                            os.mkdir(model_folder)
+                            os.makedirs(model_folder)
                         ckpt_path = os.path.join(model_folder, 'model.ckpt')
                         print(Notify.INFO, 'Saving model to %s' % ckpt_path, Notify.ENDC)
                         saver.save(sess, ckpt_path, global_step=total_step)

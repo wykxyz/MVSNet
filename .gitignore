@@ -1,0 +1,10 @@
+model/*
+model/
+tf_log/
+tf_log/*
+mvsnet/logs/
+mvsnet/*log*
+*pyc
+mvsnet/*.pyc
+tools/*.pyc
+cnn_warper/*.pyc
