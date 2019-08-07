@@ -292,9 +292,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dense_folder', type=str, default = '/home/haibao637/data/tankandtemples/intermediate/Horse/')
     parser.add_argument('--fusibile_exe_path', type=str, default = '/home/haibao637/data/fusibile/build/fusibile')
-    parser.add_argument('--prob_threshold', type=float, default = '0.15')
-    parser.add_argument('--disp_threshold', type=float, default = '0.25')
-    parser.add_argument('--num_consistent', type=float, default = '1')
+    parser.add_argument('--prob_threshold', type=float, default = '0.2')
+    parser.add_argument('--disp_threshold', type=float, default = '2.0')
+    parser.add_argument('--num_consistent', type=float, default = '3')
     parser.add_argument('--scale', type=float, default='1')
     args = parser.parse_args()
 

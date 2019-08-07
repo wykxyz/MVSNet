@@ -1,5 +1,5 @@
 tanks_dir='/home/haibao637/data/tankandtemples/intermediate//'
-test=("Family" "Horse" "Lighthouse" "Fransic" "M60" "Panther" "Playground" "Fransic" "Train" ) 
+test=("Family" "Horse" "Lighthouse" "Fransics" "M60" "Panther" "Playground" "Train" ) 
 for p in ${test[@]}
 do
 

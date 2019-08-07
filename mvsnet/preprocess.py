@@ -356,6 +356,7 @@ def gen_dtu_resized_path(dtu_data_folder, mode='training'):
 
                     paths.append(view_image_path)
                     paths.append(view_cam_path)
+                item=sorted(item,cmp=lambda x,y:cmp(x.dis,y.dis))
                 # depth path
                 # depth_image_path = os.path.join(depth_folder, ('depth_map_%04d.pfm' % ref_index))
                 # paths.append(depth_image_path)
@@ -475,10 +476,12 @@ def gen_pipeline_mvs_list(dense_folder):
     # for each dataset
     mvs_list = []
     pos = 1
+    lens=int(cluster_list[0])
     for i in range(int(cluster_list[0])):
         paths = []
+        item=[]
         # ref image
-        item=Item()
+        # item=Item()
         ref_index = cluster_list[pos]
         if ref_index.isdigit():
             ref_index="%08d"%int(ref_index)
@@ -488,21 +491,35 @@ def gen_pipeline_mvs_list(dense_folder):
         ref_cam_path = os.path.join(cam_folder, (ref_index+'_cam.txt'))
         paths.append(ref_image_path)
         paths.append(ref_cam_path)
+        item.append(Img(ref_image_path,ref_cam_path,None,0))
+        ref_cam=load_cam(open(ref_cam_path))
+        ref_c=np.matmul(-ref_cam[0,:3,:3].transpose(),ref_cam[0,:3,3])
+
         # view images
         all_view_num = int(cluster_list[pos])
         pos += 1
         check_view_num = min(FLAGS.view_num - 1, all_view_num)
         for view in range(check_view_num):
-            view_index = cluster_list[pos + 2 * view]
-            if view_index.isdigit():
-                view_index="%08d"%int(view_index)
+            if(int(ref_index)+check_view_num)<lens:
+                view_index=int(ref_index)+view+1
+            else:
+                view_index = int(cluster_list[pos + 2 * view])
+            
+            # if view_index.isdigit():
+            view_index="%08d"%int(view_index)
             view_image_path = os.path.join(image_folder, (view_index+'.jpg'))
             view_cam_path = os.path.join(cam_folder, (view_index+'_cam.txt'))
+            view_cam=load_cam(open(view_cam_path))
+            view_c=np.matmul(-view_cam[0,:3,:3].transpose(),view_cam[0,:3,3])
+            dis=np.sum((ref_c-view_c)**2)
+            
+            item.append(Img(view_image_path,view_cam_path,None,dis))
             paths.append(view_image_path)
             paths.append(view_cam_path)
+        item=sorted(item,cmp=lambda x,y:cmp(x.dis,y.dis))
         pos += 2 * all_view_num
         # depth path
-        mvs_list.append(paths)
+        mvs_list.append(item)
     return mvs_list
 def gen_eth3d_path(eth3d_data_folder, mode='training'):
     """ generate data paths for eth3d dataset """

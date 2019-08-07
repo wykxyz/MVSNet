@@ -21,16 +21,16 @@ from tools.common import Notify
 from preprocess import *
 from model import *
 from loss import *
-
+from flowmodel import *
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # dataset parameters
-tf.app.flags.DEFINE_string('dense_folder', "/home/haibao637/data/tankandtemples/intermediate/Family/", 
+tf.app.flags.DEFINE_string('dense_folder', "/home/haibao637/data/tankandtemples/intermediate/Horse/", 
                            """Root path to dense folder.""")
 tf.app.flags.DEFINE_string('model_dir', 
                            '/home/haibao637/data/tf_models',
                            """Path to restore the model.""")
-tf.app.flags.DEFINE_integer('ckpt_step', 345000,
+tf.app.flags.DEFINE_integer('ckpt_step', 500000,
                             """ckpt step.""")
 
 # input parameters
@@ -38,9 +38,9 @@ tf.app.flags.DEFINE_integer('view_num', 5,
                             """Number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 256, 
                             """Maximum depth step when testing.""")
-tf.app.flags.DEFINE_integer('max_w', 1920, 
+tf.app.flags.DEFINE_integer('max_w', 1280, 
                             """Maximum image width when testing.""")
-tf.app.flags.DEFINE_integer('max_h', 1080, 
+tf.app.flags.DEFINE_integer('max_h', 960, 
                             """Maximum image height when testing.""")
 tf.app.flags.DEFINE_float('sample_scale', 1.0, 
                             """Downsample scale for building cost volume (W and H).""")
@@ -78,15 +78,15 @@ class MVSGenerator:
                 # read input data
                 images = []
                 cams = []
-                image_index = int(os.path.splitext(os.path.basename(data[0]))[0])
-                selected_view_num = int(len(data) / 2)
+                image_index = int(os.path.splitext(os.path.basename(data[0].image))[0])
+                selected_view_num = int(len(data))
 
                 for view in range(min(self.view_num, selected_view_num)):
 #                     image_file = file_io.FileIO(data[2 * view], mode='r')
 #                     image = scipy.misc.imread(image_file, mode='RGB')
 #                     image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                    image=cv2.imread(data[2 * view])
-                    cam_file = file_io.FileIO(data[2 * view + 1], mode='r')
+                    image=cv2.imread(data[view].image)
+                    cam_file = file_io.FileIO(data[view].cam, mode='r')
                     cam = load_cam(cam_file, FLAGS.interval_scale)
                     if cam[1][3][2] == 0:
                         cam[1][3][2] = FLAGS.max_d
@@ -95,11 +95,11 @@ class MVSGenerator:
 
                 if selected_view_num < self.view_num:
                     for view in range(selected_view_num, self.view_num):
-                        image_file = file_io.FileIO(data[0], mode='r')
+                        image_file = file_io.FileIO(data[0].image, mode='r')
                         image = scipy.misc.imread(image_file, mode='RGB')
                         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-                        image=cv2.imread(data[2 * view])
-                        cam_file = file_io.FileIO(data[1], mode='r')
+                        image=cv2.imread(data[view].image)
+                        cam_file = file_io.FileIO(data[view].cam, mode='r')
                         cam = load_cam(cam_file, FLAGS.interval_scale)
                         images.append(image)
                         cams.append(cam)
@@ -200,8 +200,9 @@ def mvsnet_pipeline(mvs_list):
 
     # depth map inference using GRU
     elif FLAGS.regularization == 'GRU':
-        init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
-            depth_num, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
+        # init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
+        #     depth_num, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
+        init_depth_map=depth_inference(centered_images,scaled_cams)
         # with tf.name_scope("Model_tower0"):
         #     prob_volume = inference_1(
         #             centered_images, scaled_cams, FLAGS.max_d, depth_start, depth_end,True)
@@ -232,13 +233,13 @@ def mvsnet_pipeline(mvs_list):
         total_step = 0
 
         # load model
-        if FLAGS.model_dir is not None:
-            pretrained_model_ckpt_path = os.path.join(FLAGS.model_dir,"19-07-26-8", FLAGS.regularization, 'model.ckpt')
-            restorer = tf.train.Saver(tf.global_variables())
-            restorer.restore(sess, '-'.join([pretrained_model_ckpt_path, str(FLAGS.ckpt_step)]))
-            print(Notify.INFO, 'Pre-trained model restored from %s' %
-                  ('-'.join([pretrained_model_ckpt_path, str(FLAGS.ckpt_step)])), Notify.ENDC)
-            total_step = FLAGS.ckpt_step
+        # if FLAGS.model_dir is not None:
+        #     pretrained_model_ckpt_path = os.path.join(FLAGS.model_dir,"19-07-26-8", FLAGS.regularization, 'model.ckpt')
+        #     restorer = tf.train.Saver(tf.global_variables())
+        #     restorer.restore(sess, '-'.join([pretrained_model_ckpt_path, str(FLAGS.ckpt_step)]))
+        #     print(Notify.INFO, 'Pre-trained model restored from %s' %
+        #           ('-'.join([pretrained_model_ckpt_path, str(FLAGS.ckpt_step)])), Notify.ENDC)
+        #     total_step = FLAGS.ckpt_step
     
         # run inference for each reference view
         sess.run(mvs_iterator.initializer)
@@ -246,8 +247,8 @@ def mvsnet_pipeline(mvs_list):
 
             start_time = time.time()
             try:
-                out_init_depth_map, out_prob_map, out_images, out_cams, out_index = sess.run(
-                    [init_depth_map, prob_map, scaled_images, scaled_cams, image_index])
+                out_init_depth_map, out_images, out_cams, out_index = sess.run(
+                    [init_depth_map, scaled_images, scaled_cams, image_index])
             except tf.errors.OutOfRangeError:
                 print("all dense finished")  # ==> "End of dataset"
                 break
@@ -257,7 +258,7 @@ def mvsnet_pipeline(mvs_list):
 
             # squeeze output
             out_init_depth_image = np.squeeze(out_init_depth_map)
-            out_prob_map = np.squeeze(out_prob_map)
+            out_prob_map = np.squeeze(out_init_depth_map)
             out_ref_image = np.squeeze(out_images)
             out_ref_image = np.squeeze(out_ref_image[0, :, :, :])
             out_ref_cam = np.squeeze(out_cams)
@@ -284,7 +285,7 @@ def main(_):  # pylint: disable=unused-argument
     """ program entrance """
     # generate input path list
     mvs_list = gen_pipeline_mvs_list(FLAGS.dense_folder)
-    # print(mvs_list[78])
+    # print([[item.image,item.dis] for item in mvs_list[32]])
     # mvsnet inference
     mvsnet_pipeline(mvs_list)
 

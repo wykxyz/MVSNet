@@ -214,11 +214,11 @@ sys.path.append("../")
         new_coords[..., :2] = new_coords[..., :2] / new_coords[..., 2].unsqueeze(-1)
         distance2 = (new_coords[..., :2] - coords[..., :2].cuda()) ** 2
         ref_depth_map = ref_depth_map.cuda()
-        mask = ((torch.sqrt(torch.sum(distance2, dim=-1)) < 0.5).reshape(-1, batch_size,1, height, width)) & (
+        mask = ((torch.sqrt(torch.sum(distance2, dim=-1)) < 1.0).reshape(-1, batch_size,1, height, width)) & (
         (torch.abs(z1 - ref_depth_map) *2/torch.abs(ref_depth_map+z1)< 0.01)) & (z1 > 0) & (ref_depth_map > 0.0)
         # mask=((torch.abs(z1-ref_depth_map)<0.01))
         mask = torch.sum(mask.type(torch.float32), dim=0) >= 3.0
-
+        
         ref_color_maps = ref_color_maps.cuda()
         ref_depth_map=ref_depth_map.cuda()
         # expand_ref_color_maps = self.CNN(ref_color_maps)
@@ -238,7 +238,11 @@ sys.path.append("../")
 
         # mask=mask&(ds>0.8)
 
-        mask=mask.type(torch.float32)
+        mask=mask.type(torch.float32)#b,h,w,1
+      
+
+
+
         # vis.images((ds+1)/2*255.0)
 
 

@@ -12,7 +12,7 @@ import sys
 import math
 import argparse
 from random import randint
-
+from flowmodel import *
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -58,9 +58,9 @@ tf.app.flags.DEFINE_integer('view_num', 5,
                             """Number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 128,
                             """Maximum depth step when training.""")
-tf.app.flags.DEFINE_integer('max_w', 640,
+tf.app.flags.DEFINE_integer('max_w', 160,
                             """Maximum image width when training.""")
-tf.app.flags.DEFINE_integer('max_h', 512,
+tf.app.flags.DEFINE_integer('max_h', 128,
                             """Maximum image height when training.""")
 tf.app.flags.DEFINE_float('sample_scale', 0.25,
                             """Downsample scale for building cost volume.""")
@@ -183,6 +183,8 @@ def average_gradients(tower_grads):
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
         grads = []
         for g, _ in grad_and_vars:
+            if g is None :
+                continue
             # Add 0 dimension to the gradients to represent the tower.
             expanded_g = tf.expand_dims(g, 0)
 
@@ -366,8 +368,9 @@ def train(traning_list):
                     if FLAGS.regularization == 'GRU':
 
                         # probability volume
-                        prob_volume = inference_prob_recurrent_1(
-                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+                        # prob_volume = inference_prob_recurrent_1(
+                        #     images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+                        depth_map=depth_inference(images,cams)
 
                         
 
@@ -382,15 +385,15 @@ def train(traning_list):
                         #     depth_map=tf.reshape(tf.linspace(depth_start,depth_end,FLAGS.max_d),[-1,FLAGS.max_d,1,1,1,])
                         #     depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
 
-                        # loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
+                        loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
                         # K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
                         # loss_1=normal_loss(depth_map,depth_image,K)
                         # loss+=loss_1
                       
                         # classification loss
-                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
-                            mvsnet_classification_loss(
-                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+                        # loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                        #     mvsnet_classification_loss(
+                        #         prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
 
                     # retain the summaries from the final tower.
 
@@ -403,7 +406,7 @@ def train(traning_list):
                     tower_grads.append(grads)
 
         # average gradient
-        grads = average_gradients(tower_grads)
+        # grads = average_gradients(tower_grads)
 
         # training opt
         # train_opt=tf.cond(loss>0,lambda:opt.apply_gradients(grads, global_step=global_step),lambda:loss)

@@ -75,6 +75,12 @@ def PQ(left_cam,right_cam,image_shape):
     P = tf.matmul(P, pixel_grids)#b,3,[h*w]
     return P, Q
 def grad_d(P,Q,x,axis=0):
+    shape=tf.shape(x)
+    batch_size=shape[0]
+    height=shape[1]
+    width=shape[2]
+
+    x=tf.reshape(x,[batch_size,1,-1])
     p0=tf.slice(P,[0,axis,0],[-1,1,-1])
     p2=tf.slice(P,[0,2,0],[-1,1,-1])
     q0=tf.slice(Q,[0,axis,0],[-1,1,-1])
@@ -84,6 +90,7 @@ def grad_d(P,Q,x,axis=0):
     mask=tf.cast(div==0.0,dtype=tf.float32)
     div=mask*div+1e-7+(1-mask)*div
     depth=tf.divide(up,div)
+    depth=tf.reshape(depth,[batch_size,height,width,1])
     return depth
 
 def get_homographies(left_cam, right_cam, depth_num, depth_start, depth_interval,scale=1.0):
@@ -413,7 +420,8 @@ def interpolate(image, x, y):
     # mask=tf.cast(total>0,tf.float32)
     # total=mask*total+(1-mask)
     # output=output/total
-    return output
+    
+    return tf.reshape(output,tf.shape(image))
 
 def homography_warping(input_image, homography):
     with tf.name_scope('warping_by_homography'):
