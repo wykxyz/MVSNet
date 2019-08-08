@@ -39,7 +39,7 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
    
     depths=[]
 
-    for rx in np.arange(-width/8.0,width/8.0,width/4.0/radius):
+    for rx in np.arange(-radius/2,radius/2,0.5):
         # xflow=flow+float(rx)
         xflow=flow+float(rx)
         coords=x_coordinates+xflow
@@ -124,7 +124,7 @@ def depth_inference(images,cams):
         features=tf.reshape(conv2_2,[FLAGS.batch_size,FLAGS.view_num,height/4,width/4,32])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
-        radius=[16,32,64]
+        radius=[16,8,4]
         flow=tf.zeros([batch_size,height/4,width/4,1])
         cams=update_cams(cams,0.25)
         flow,depth0,_,_=flow_pipline(ref_feature,view_features,cams,flow,radius[0],[batch_size,height/4,width/4,32],0)
@@ -150,8 +150,8 @@ def depth_inference(images,cams):
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
         cams=update_cams(cams,2)
-        # up_flow=tf.image.resize_images(flow,(height,width))*2.0
-        up_flow=tf.zeros([batch_size,height,width,1])
+        up_flow=tf.image.resize_images(flow,(height,width))*2.0
+        # up_flow=tf.zeros([batch_size,height,width,1])
         flow,depth2,depth_min,depth_max=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,32],2)
        
         return depth2,depth1,depth0
