@@ -375,8 +375,8 @@ def train(traning_list):
                         depth_map1=tf.clip_by_value(depth_map1,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
                         depth_map0=tf.clip_by_value(depth_map0,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
                         
-                        depth_image1=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
-                        depth_image0=tf.image.resize(depth_image,[FLAGS.max_h/4,FLAGS.max_w/4])
+                        depth_image1=tf.image.resize_images(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
+                        depth_image0=tf.image.resize_images(depth_image,[FLAGS.max_h/4,FLAGS.max_w/4])
                         
 
                         # if FLAGS.inverse_depth:
@@ -473,8 +473,8 @@ def train(traning_list):
                     # run one batch
                     start_time = time.time()
                     try:
-                        out_summary_op, out_opt, out_loss, out_less_one, out_less_three = sess.run(
-                            [summary_op, train_opt, loss, less_one_accuracy, less_three_accuracy])
+                        out_summary_op, out_opt, out_loss, out_less_one, out_less_three,out_depth_map2 = sess.run(
+                            [summary_op, train_opt, loss, less_one_accuracy, less_three_accuracy,depth_map2])
                     except tf.errors.OutOfRangeError:
                         print("End of dataset")  # ==> "End of dataset"
                         break
@@ -485,7 +485,7 @@ def train(traning_list):
                         print(Notify.INFO,
                               'epoch, %d, step %d, total_step %d, loss = %.4f, (< 1px) = %.4f, (< 3px) = %.4f (%.3f sec/step)' %
                               (epoch, step, total_step, out_loss, out_less_one, out_less_three, duration), Notify.ENDC)
-
+                        print(Notify.INFO,'depth min :%.4f depth max:%.4f'%(out_depth_map2.min(),out_depth_map2.max()))
                     # write summary
                     if (total_step % (FLAGS.display * 10) == 0) and  (out_loss>0):
                         summary_writer.add_summary(out_summary_op, total_step)

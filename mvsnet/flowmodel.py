@@ -77,10 +77,11 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
     flow0=tf.reduce_sum((flow_dists*costs),1)#b,h,w,1
     coords=x_coordinates+ flow0
     depth=grad_d(p,q,coords)
-    depths=tf.stack(depths,1)
-    depth_min=tf.reduce_min(depths,1)
-    depth_max=tf.reduce_max(depths,1)
-    return flow0,depth,depth_min,depth_max
+    # depths=tf.stack(depths,1)
+    # depth=tf.reduce_sum((depths*costs),1)
+    # depth_min=tf.reduce_min(depths,1)
+    # depth_max=tf.reduce_max(depths,1)
+    return flow0,depth
 
 def conv(inputs,filter,kernel_size,stride,padding,name,reuse):
     return  tf.layers.conv2d(inputs,filter,kernel_size,stride,padding,name=name,reuse=reuse)   
@@ -124,10 +125,10 @@ def depth_inference(images,cams):
         features=tf.reshape(conv2_2,[FLAGS.batch_size,FLAGS.view_num,height/4,width/4,32])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
-        radius=[16,8,4]
+        radius=[40,8,4]
         flow=tf.zeros([batch_size,height/4,width/4,1])
         cams=update_cams(cams,0.25)
-        flow,depth0,_,_=flow_pipline(ref_feature,view_features,cams,flow,radius[0],[batch_size,height/4,width/4,32],0)
+        flow,depth0=flow_pipline(ref_feature,view_features,cams,flow,radius[0],[batch_size,height/4,width/4,32],0)
         conv2_2=tf.nn.relu(conv2_2)
         dconv3_0=deconv_bn(conv2_2,64,3,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv3_0')
         conv3_1=conv_bn(tf.concat([dconv3_0,conv1_2],-1),32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv3_1')
@@ -139,7 +140,7 @@ def depth_inference(images,cams):
         cams=update_cams(cams,2)
         up_flow=tf.image.resize_images(flow,(height/2,width/2))*2.0
 
-        flow,depth1,_,_=flow_pipline(ref_feature,view_features,cams,up_flow,radius[1],[batch_size,height/2,width/2,32],1)
+        flow,depth1=flow_pipline(ref_feature,view_features,cams,up_flow,radius[1],[batch_size,height/2,width/2,32],1)
       
         conv3_3=tf.nn.relu(conv3_3)
         dconv4_0=deconv_bn(conv3_3,32,1,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv4_0')
@@ -152,6 +153,6 @@ def depth_inference(images,cams):
         cams=update_cams(cams,2)
         up_flow=tf.image.resize_images(flow,(height,width))*2.0
         # up_flow=tf.zeros([batch_size,height,width,1])
-        flow,depth2,depth_min,depth_max=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,32],2)
+        flow,depth2=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,32],2)
        
         return depth2,depth1,depth0
