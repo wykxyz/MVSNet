@@ -124,7 +124,7 @@ def depth_inference(images,cams):
         features=tf.reshape(conv2_2,[FLAGS.batch_size,FLAGS.view_num,height/4,width/4,32])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
-        radius=[8,16,128]
+        radius=[16,32,64]
         flow=tf.zeros([batch_size,height/4,width/4,1])
         cams=update_cams(cams,0.25)
         flow,depth0,_,_=flow_pipline(ref_feature,view_features,cams,flow,radius[0],[batch_size,height/4,width/4,32],0)
