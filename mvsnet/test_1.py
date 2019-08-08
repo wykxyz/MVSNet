@@ -202,7 +202,7 @@ def mvsnet_pipeline(mvs_list):
     elif FLAGS.regularization == 'GRU':
         # init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
         #     depth_num, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
-        init_depth_map=depth_inference(centered_images,scaled_cams)
+        init_depth_map,_,_=depth_inference(centered_images,scaled_cams)
         # with tf.name_scope("Model_tower0"):
         #     prob_volume = inference_1(
         #             centered_images, scaled_cams, FLAGS.max_d, depth_start, depth_end,True)

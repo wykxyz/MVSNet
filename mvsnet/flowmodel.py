@@ -21,9 +21,9 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
     height=shape[1]
     width=shape[2]
     channel=shape[3]   
-    conv_gru0 = ConvGRUCell(shape=[height, width], kernel=[3, 3], filters=channel)
-    conv_gru1 = ConvGRUCell(shape=[height, width], kernel=[3, 3], filters=channel/2)
-    conv_gru2 = ConvGRUCell(shape=[height, width], kernel=[3, 3], filters=channel/4)
+    conv_gru0 = ConvGRUCell(shape=[None, None], kernel=[3, 3], filters=channel)
+    conv_gru1 = ConvGRUCell(shape=[None, None], kernel=[3, 3], filters=channel/2)
+    conv_gru2 = ConvGRUCell(shape=[None, None], kernel=[3, 3], filters=channel/4)
     state0 = tf.zeros([FLAGS.batch_size, height, width, channel])
     state1 = tf.zeros([FLAGS.batch_size, height, width, channel/2])
     state2 = tf.zeros([FLAGS.batch_size, height, width, channel/4])
@@ -63,11 +63,11 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
         rnn model
         """
 
-        cost,state0=conv_gru0(-cost,state0,scope='conv_gru_%d_0'%index)
-        cost,state1=conv_gru1(cost,state1,scope='conv_gru_%d_1'%index)
-        cost,state2=conv_gru2(cost,state2,scope='conv_gru_%d_2'%index)
+        cost,state0=conv_gru0(-cost,state0,scope='conv_gru_0')
+        cost,state1=conv_gru1(cost,state1,scope='conv_gru_1')
+        cost,state2=conv_gru2(cost,state2,scope='conv_gru_2')
        
-        cost=tf.layers.conv2d(cost,1,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv_%d'%index)
+        cost=tf.layers.conv2d(cost,1,3,1,'SAME',reuse=tf.AUTO_REUSE,name='cost_conv')
 
         cost=tf.reshape(cost,[batch_size,height,width,1])
         costs.append(cost)
@@ -114,20 +114,20 @@ def depth_inference(images,cams):
 
         conv2_0=conv_bn(conv1_2,64,3,2,'SAME',name='conv2_0',reuse=tf.AUTO_REUSE)
         conv2_1=conv_bn(conv2_0,64,3,1,'SAME',name='conv2_1',reuse=tf.AUTO_REUSE)
-        conv2_2=conv(conv2_1,64,3,1,'SAME',name='conv2_2',reuse=tf.AUTO_REUSE) #f2
+        conv2_2=conv(conv2_1,32,3,1,'SAME',name='conv2_2',reuse=tf.AUTO_REUSE) #f2
         #decode 
         
         #end of unet model 
        
         
         channel=tf.shape(conv2_2)[3]
-        features=tf.reshape(conv2_2,[FLAGS.batch_size,FLAGS.view_num,height/4,width/4,64])
+        features=tf.reshape(conv2_2,[FLAGS.batch_size,FLAGS.view_num,height/4,width/4,32])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
-        radius=[128,64,32]
-        xflow=tf.zeros([batch_size,height/4,width/4,1])
+        radius=[8,16,128]
+        flow=tf.zeros([batch_size,height/4,width/4,1])
         cams=update_cams(cams,0.25)
-        xflow,depth0,_,_=flow_pipline(ref_feature,view_features,cams,xflow,radius[0],[batch_size,height/4,width/4,64],0)
+        flow,depth0,_,_=flow_pipline(ref_feature,view_features,cams,flow,radius[0],[batch_size,height/4,width/4,32],0)
         conv2_2=tf.nn.relu(conv2_2)
         dconv3_0=deconv_bn(conv2_2,64,3,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv3_0')
         conv3_1=conv_bn(tf.concat([dconv3_0,conv1_2],-1),32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv3_1')
@@ -137,21 +137,21 @@ def depth_inference(images,cams):
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
         cams=update_cams(cams,2)
-        up_flow=tf.image.resize_images(xflow,(height/2,width/2))*2.0
+        up_flow=tf.image.resize_images(flow,(height/2,width/2))*2.0
 
         flow,depth1,_,_=flow_pipline(ref_feature,view_features,cams,up_flow,radius[1],[batch_size,height/2,width/2,32],1)
       
         conv3_3=tf.nn.relu(conv3_3)
         dconv4_0=deconv_bn(conv3_3,32,1,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv4_0')
-        conv4_1=conv_bn(tf.concat([dconv4_0,conv0_2],-1),16,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_1')
-        conv4_2=conv_bn(conv4_1,16,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_2')
-        conv4_3=conv(conv4_2,16,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_3')
-        features=tf.reshape(conv4_3,[FLAGS.batch_size,FLAGS.view_num,height,width,16])
+        conv4_1=conv_bn(tf.concat([dconv4_0,conv0_2],-1),32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_1')
+        conv4_2=conv_bn(conv4_1,32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_2')
+        conv4_3=conv(conv4_2,32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_3')
+        features=tf.reshape(conv4_3,[FLAGS.batch_size,FLAGS.view_num,height,width,32])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
         cams=update_cams(cams,2)
-        up_flow=tf.image.resize_images(flow,(height,width))*2.0
-
-        flow,depth2,depth_min,depth_max=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,16],2)
+        # up_flow=tf.image.resize_images(flow,(height,width))*2.0
+        up_flow=tf.zeros([batch_size,height,width,1])
+        flow,depth2,depth_min,depth_max=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,32],2)
        
-        return depth2,depth_min,depth_max
+        return depth2,depth1,depth0

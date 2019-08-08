@@ -372,9 +372,9 @@ def train(traning_list):
                         depth_map,depth_min,depth_max=depth_inference(images,cams)
                         mask=tf.cast(depth_image<=depth_max,tf.float32)*tf.cast(depth_image>=depth_min,tf.float32)
                         depth_image=depth_image*mask
-                        depth_map=tf.clip_by_value(depth_map,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
-                        # depth_image=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
-                        # depth_image1=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
+                        depth_map2,depth_map1,depth_map0=tf.clip_by_value(depth_map,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
+                        depth_image1=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
+                        depth_image0=tf.image.resize(depth_image,[FLAGS.max_h/4,FLAGS.max_w/4])
                         
 
                         # if FLAGS.inverse_depth:
@@ -388,10 +388,10 @@ def train(traning_list):
                         #     depth_map=tf.reshape(tf.linspace(depth_start,depth_end,FLAGS.max_d),[-1,FLAGS.max_d,1,1,1,])
                         #     depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
                         
-                        # loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
-                        # loss1,_,_=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
-                        loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
-                        # loss=(loss+loss0+loss1)/3.0
+                        loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
+                        loss1,_,_=mvsnet_regression_loss(depth_map1,depth_image1,depth_interval)
+                        loss0,_,_=mvsnet_regression_loss(depth_map0,depth_image0,depth_interval)
+                        loss=0.8*loss+0.1*loss0+0.1*loss1
           
                         # K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
                         # loss_1=normal_loss(depth_map,depth_image,K)
