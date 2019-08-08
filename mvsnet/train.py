@@ -205,7 +205,7 @@ def average_gradients(tower_grads):
 
 def train(traning_list):
     """ training mvsnet """
-    training_sample_size = len(traning_list)*2
+    training_sample_size = len(traning_list)
     #if FLAGS.regularization == 'GRU':
     training_sample_size = training_sample_size
     print('sample number: ', training_sample_size)
@@ -372,7 +372,7 @@ def train(traning_list):
                         depth_map,depth_min,depth_max=depth_inference(images,cams)
                         mask=tf.cast(depth_image<=depth_max,tf.float32)*tf.cast(depth_image>=depth_min,tf.float32)
                         depth_image=depth_image*mask
-                        depth_map=tf.clip_by_value(depth_map,depth_start,depth_end)
+                        depth_map=tf.clip_by_value(depth_map,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
                         # depth_image=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
                         # depth_image1=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
                         
