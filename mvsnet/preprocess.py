@@ -295,25 +295,28 @@ def gen_dtu_resized_path(dtu_data_folder, mode='training'):
                     ref_c=np.matmul(-ref_cam[0,:3,:3].transpose(),ref_cam[0,:3,3])
                     # view images
                     FIN_MAX=10000
-                    for view in range(5- 1):
+                    for view in range(FLAGS.view_num- 1):
                         view_index = int(cluster_list[22 * p + 2 * view + 3])
+                        score=float(cluster_list[22*p+2*view+4])
+                        if score<2000:
+                            continue
                         view_image_path = os.path.join(
                             image_folder, ('rect_%03d_%d_r5000.png' % ((view_index + 1), j)))
                         view_cam_path = os.path.join(cam_folder, ('%08d_cam.txt' % view_index))
                         view_cam=load_cam(open(view_cam_path))
                         view_c=np.matmul(-view_cam[0,:3,:3].transpose(),view_cam[0,:3,3])
-                        dis=np.sum((ref_c-view_c)**2)
+                        dis=abs(ref_index-view_index)
                         depth_image_path = os.path.join(depth_folder, ('depth_map_%04d.pfm' % view_index))
                         item.append(Img(view_image_path,view_cam_path,depth_image_path,dis))
-                    item=sorted(item,cmp=lambda x,y:cmp(x.dis,y.dis))
+                    # item=sorted(item,cmp=lambda x,y:cmp(x.dis,y.dis))
                     # depth path
 
                     # each ref image have 10 images
                     # depths=list(combinations(item.depths[1:], 2))
                     # cams=list(combinations(item.cams[1:], 2))
                     # images=list(combinations(item.images[1:], 2))
-
-                    sample_list.append(item)
+                    if len(item)>=3:
+                        sample_list.append(item)
                     # for i in range(len(cams)):
                     #     item_p=Item()
                     #     item_p.depths.append(item.depths[0])
@@ -569,6 +572,8 @@ def gen_eth3d_path(eth3d_data_folder, mode='training'):
             # view images
             for view in range(FLAGS.view_num - 1):
                 view_index = int(cluster_list[22 * p + 2 * view + 3])
+               
+               
                 view_image_name = index2name[view_index]
                 view_image_path = os.path.join(image_folder, view_image_name)
                 view_cam_path = os.path.join(cam_folder, ('%08d_cam.txt' % view_index))

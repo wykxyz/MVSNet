@@ -54,7 +54,7 @@ tf.app.flags.DEFINE_integer('ckpt_step', 400000,
                             """ckpt step.""")
 
 # input parameters
-tf.app.flags.DEFINE_integer('view_num', 5,
+tf.app.flags.DEFINE_integer('view_num', 3,
                             """Number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 128,
                             """Maximum depth step when training.""")
@@ -82,7 +82,7 @@ tf.app.flags.DEFINE_integer('epoch', 40,
                             """Training epoch number.""")
 tf.app.flags.DEFINE_float('val_ratio', 0,
                           """Ratio of validation set when splitting dataset.""")
-tf.app.flags.DEFINE_float('base_lr', 1e-3,
+tf.app.flags.DEFINE_float('base_lr', 1e-1,
                           """Base learning rate.""")
 tf.app.flags.DEFINE_integer('display', 1,
                             """Interval of loginfo display.""")
@@ -159,12 +159,12 @@ class MVSGenerator:
                 # if FLAGS.regularization == 'GRU':
                 #     self.counter += 1
                 # start_time = time.time()
-                cams[0][1, 3, 0] = cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]
-                cams[0][1, 3, 1] = -cams[0][1, 3, 1]
-                duration = time.time() - start_time
-                print('Back pass: d_min = %f, d_max = %f.' % \
-                   (cams[0][1, 3, 0], cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]))
-                yield (images, cams, depth_images)
+                # cams[0][1, 3, 0] = cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]
+                # cams[0][1, 3, 1] = -cams[0][1, 3, 1]
+                # duration = time.time() - start_time
+                # print('Back pass: d_min = %f, d_max = %f.' % \
+                #    (cams[0][1, 3, 0], cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]))
+                # yield (images, cams, depth_images)
 
 def average_gradients(tower_grads):
     """Calculate the average gradient for each shared variable across all towers.
@@ -183,8 +183,7 @@ def average_gradients(tower_grads):
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
         grads = []
         for g, _ in grad_and_vars:
-            if g is None :
-                continue
+           
             # Add 0 dimension to the gradients to represent the tower.
             expanded_g = tf.expand_dims(g, 0)
 
@@ -251,17 +250,17 @@ def train(traning_list):
                         is_master_gpu = True
                     depth_image = tf.squeeze(
                         tf.slice(depth_images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, 1]), axis=1)
-                    ref_cam=tf.squeeze(tf.slice(cams,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
-                    ref_depth = tf.squeeze(tf.slice(depth_images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, -1]),1)
-                    mask=tf.ones_like(depth_image,dtype=tf.float32)
-                    for view in range(1,FLAGS.view_num):
-                        view_cam=tf.squeeze(tf.slice(cams,[0,view,0,0,0],[-1,1,-1,-1,-1]),1)
-                        view_depth=tf.squeeze(tf.slice(depth_images,[0,view,0,0,0],[-1,1,-1,-1,-1]),1)
-                        warp_depth,grid_depth,m=reprojection_depth(input_image=view_depth,left_cam=ref_cam,right_cam=view_cam,depth_map=ref_depth)
-                        mask=tf.cast(tf.less_equal(tf.abs(warp_depth-grid_depth),tf.abs(depth_interval))&m,tf.float32)+mask
+                    # ref_cam=tf.squeeze(tf.slice(cams,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
+                    # ref_depth = tf.squeeze(tf.slice(depth_images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, -1]),1)
+                    # mask=tf.ones_like(depth_image,dtype=tf.float32)
+                    # for view in range(1,FLAGS.view_num):
+                    #     view_cam=tf.squeeze(tf.slice(cams,[0,view,0,0,0],[-1,1,-1,-1,-1]),1)
+                    #     view_depth=tf.squeeze(tf.slice(depth_images,[0,view,0,0,0],[-1,1,-1,-1,-1]),1)
+                    #     warp_depth,grid_depth,m=reprojection_depth(input_image=view_depth,left_cam=ref_cam,right_cam=view_cam,depth_map=ref_depth)
+                    #     mask=tf.cast(tf.less_equal(tf.abs(warp_depth-grid_depth),tf.abs(depth_interval))&m,tf.float32)+mask
 
-                    mask=tf.cast(tf.greater_equal(mask,2.0),tf.float32)
-                    depth_image=depth_image*mask
+                    # mask=tf.cast(tf.greater_equal(mask,2.0),tf.float32)
+                    # depth_image=depth_image*mask
                     # inference
                     # if FLAGS.regularization == '1DCNNs':
                         # depth_image=tf.squeeze(
@@ -370,8 +369,12 @@ def train(traning_list):
                         # probability volume
                         # prob_volume = inference_prob_recurrent_1(
                         #     images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
-                        depth_map=depth_inference(images,cams)
-
+                        depth_map,depth_min,depth_max=depth_inference(images,cams)
+                        mask=tf.cast(depth_image<=depth_max,tf.float32)*tf.cast(depth_image>=depth_min,tf.float32)
+                        depth_image=depth_image*mask
+                        depth_map=tf.clip_by_value(depth_map,depth_start,depth_end)
+                        # depth_image=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
+                        # depth_image1=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
                         
 
                         # if FLAGS.inverse_depth:
@@ -384,8 +387,12 @@ def train(traning_list):
                         # else:
                         #     depth_map=tf.reshape(tf.linspace(depth_start,depth_end,FLAGS.max_d),[-1,FLAGS.max_d,1,1,1,])
                         #     depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
-
+                        
+                        # loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
+                        # loss1,_,_=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
                         loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
+                        # loss=(loss+loss0+loss1)/3.0
+          
                         # K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
                         # loss_1=normal_loss(depth_map,depth_image,K)
                         # loss+=loss_1
@@ -406,7 +413,7 @@ def train(traning_list):
                     tower_grads.append(grads)
 
         # average gradient
-        # grads = average_gradients(tower_grads)
+        grads = average_gradients(tower_grads)
 
         # training opt
         # train_opt=tf.cond(loss>0,lambda:opt.apply_gradients(grads, global_step=global_step),lambda:loss)

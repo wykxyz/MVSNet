@@ -72,6 +72,8 @@ def main(_):  # pylint: disable=unused-argument
     """ program entrance """
     # generate input path list
     mvs_list = gen_pipeline_mvs_list(FLAGS.dense_folder)
+    for item in mvs_list:
+        
     # mvsnet inference
     
 
