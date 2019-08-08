@@ -369,10 +369,12 @@ def train(traning_list):
                         # probability volume
                         # prob_volume = inference_prob_recurrent_1(
                         #     images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
-                        depth_map,depth_min,depth_max=depth_inference(images,cams)
-                        mask=tf.cast(depth_image<=depth_max,tf.float32)*tf.cast(depth_image>=depth_min,tf.float32)
-                        depth_image=depth_image*mask
-                        depth_map2,depth_map1,depth_map0=tf.clip_by_value(depth_map,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
+                        depth_map2,depth_map1,depth_map0=depth_inference(images,cams)
+                        
+                        depth_map2=tf.clip_by_value(depth_map2,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
+                        depth_map1=tf.clip_by_value(depth_map1,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
+                        depth_map0=tf.clip_by_value(depth_map0,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
+                        
                         depth_image1=tf.image.resize(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
                         depth_image0=tf.image.resize(depth_image,[FLAGS.max_h/4,FLAGS.max_w/4])
                         
