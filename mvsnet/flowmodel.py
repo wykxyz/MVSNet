@@ -39,7 +39,7 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
    
     depths=[]
 
-    for rx in np.arange(-radius/2,radius/2,0.5):
+    for rx in np.arange(-radius/2.0,radius/2.0,1.0):
         # xflow=flow+float(rx)
         xflow=flow+float(rx)
         coords=x_coordinates+xflow
@@ -63,11 +63,11 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
         rnn model
         """
 
-        cost,state0=conv_gru0(-cost,state0,scope='conv_gru_0')
-        cost,state1=conv_gru1(cost,state1,scope='conv_gru_1')
-        cost,state2=conv_gru2(cost,state2,scope='conv_gru_2')
+        cost,state0=conv_gru0(-cost,state0,scope='conv_gru_%d_0'%index)
+        cost,state1=conv_gru1(cost,state1,scope='conv_gru_%d_1'%index)
+        cost,state2=conv_gru2(cost,state2,scope='conv_gru_%d_2'%index)
        
-        cost=tf.layers.conv2d(cost,1,3,1,'SAME',reuse=tf.AUTO_REUSE,name='cost_conv')
+        cost=tf.layers.conv2d(cost,1,3,1,'SAME',reuse=tf.AUTO_REUSE,name='cost_conv_%d'%index)
 
         cost=tf.reshape(cost,[batch_size,height,width,1])
         costs.append(cost)
@@ -76,6 +76,7 @@ def flow_pipline(ref_feature,view_features,cams,flow,radius,shape,index=0):
     flow_dists=tf.stack(flow_dists,1)#b,d,h,w,1
     flow0=tf.reduce_sum((flow_dists*costs),1)#b,h,w,1
     coords=x_coordinates+ flow0
+    coords=tf.clip_by_value(coords,0,width)
     depth=grad_d(p,q,coords)
     # depths=tf.stack(depths,1)
     # depth=tf.reduce_sum((depths*costs),1)
@@ -88,11 +89,11 @@ def conv(inputs,filter,kernel_size,stride,padding,name,reuse):
 def conv_bn(inputs,filter,kernel_size,stride,padding,name,reuse):
     x=conv(inputs,filter,kernel_size,stride,padding,name=name,reuse=reuse)
     x=tf.contrib.layers.batch_norm(x)
-    return tf.nn.relu(x)
+    return tf.nn.leaky_relu(x)
 def deconv_bn(inputs,filter,kernel_size,stride,padding,name,reuse):
     x=tf.layers.conv2d_transpose(inputs,filter,kernel_size,stride,padding,name=name,reuse=reuse)
     x=tf.contrib.layers.batch_norm(x)
-    return tf.nn.relu(x)
+    return tf.nn.leaky_relu(x)
 
 
 def depth_inference(images,cams):
@@ -125,34 +126,34 @@ def depth_inference(images,cams):
         features=tf.reshape(conv2_2,[FLAGS.batch_size,FLAGS.view_num,height/4,width/4,32])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
-        radius=[40,8,4]
+        radius=[80,8,8]
         flow=tf.zeros([batch_size,height/4,width/4,1])
         cams=update_cams(cams,0.25)
         flow,depth0=flow_pipline(ref_feature,view_features,cams,flow,radius[0],[batch_size,height/4,width/4,32],0)
         conv2_2=tf.nn.relu(conv2_2)
-        dconv3_0=deconv_bn(conv2_2,64,3,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv3_0')
+        dconv3_0=deconv_bn(conv2_2,32,3,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv3_0')
         conv3_1=conv_bn(tf.concat([dconv3_0,conv1_2],-1),32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv3_1')
         conv3_2=conv_bn(conv3_1,32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv3_2')
-        conv3_3=conv(conv3_2,32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv3_3')
-        features=tf.reshape(conv3_3,[FLAGS.batch_size,FLAGS.view_num,height/2,width/2,32])
+        conv3_3=conv(conv3_2,16,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv3_3')
+        features=tf.reshape(conv3_3,[FLAGS.batch_size,FLAGS.view_num,height/2,width/2,16])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
         cams=update_cams(cams,2)
         up_flow=tf.image.resize_images(flow,(height/2,width/2))*2.0
 
-        flow,depth1=flow_pipline(ref_feature,view_features,cams,up_flow,radius[1],[batch_size,height/2,width/2,32],1)
+        flow,depth1=flow_pipline(ref_feature,view_features,cams,up_flow,radius[1],[batch_size,height/2,width/2,16],1)
       
         conv3_3=tf.nn.relu(conv3_3)
-        dconv4_0=deconv_bn(conv3_3,32,1,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv4_0')
-        conv4_1=conv_bn(tf.concat([dconv4_0,conv0_2],-1),32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_1')
-        conv4_2=conv_bn(conv4_1,32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_2')
-        conv4_3=conv(conv4_2,32,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_3')
-        features=tf.reshape(conv4_3,[FLAGS.batch_size,FLAGS.view_num,height,width,32])
+        dconv4_0=deconv_bn(conv3_3,16,1,2,'SAME',reuse=tf.AUTO_REUSE,name='dconv4_0')
+        conv4_1=conv_bn(tf.concat([dconv4_0,conv0_2],-1),8,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_1')
+        conv4_2=conv_bn(conv4_1,8,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_2')
+        conv4_3=conv(conv4_2,8,3,1,'SAME',reuse=tf.AUTO_REUSE,name='conv4_3')
+        features=tf.reshape(conv4_3,[FLAGS.batch_size,FLAGS.view_num,height,width,8])
         ref_feature=tf.squeeze(tf.slice(features,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
         view_features=tf.slice(features,[0,1,0,0,0],[-1,-1,-1,-1,-1])
         cams=update_cams(cams,2)
         up_flow=tf.image.resize_images(flow,(height,width))*2.0
         # up_flow=tf.zeros([batch_size,height,width,1])
-        flow,depth2=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,32],2)
+        flow,depth2=flow_pipline(ref_feature,view_features,cams,up_flow,radius[2],[batch_size,height,width,8],2)
        
         return depth2,depth1,depth0

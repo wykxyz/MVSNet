@@ -33,7 +33,7 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # paths
 
-tf.app.flags.DEFINE_string('dtu_data_root', '/home/haibao637/data/mvs_training/dtu/',
+tf.app.flags.DEFINE_string('dtu_data_root', '/home/haibao637/data/DPSNet/dataset/train//',
                            """Path to dtu dataset.""")
 # tf.app.flags.DEFINE_string('eth3d_data_root', '/home/yanjianfeng/data6//eth3d_training/eth3d/',
 #                            """Path to dtu dataset.""")
@@ -58,9 +58,9 @@ tf.app.flags.DEFINE_integer('view_num', 3,
                             """Number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 128,
                             """Maximum depth step when training.""")
-tf.app.flags.DEFINE_integer('max_w', 160,
+tf.app.flags.DEFINE_integer('max_w', 640,
                             """Maximum image width when training.""")
-tf.app.flags.DEFINE_integer('max_h', 128,
+tf.app.flags.DEFINE_integer('max_h', 480,
                             """Maximum image height when training.""")
 tf.app.flags.DEFINE_float('sample_scale', 0.25,
                             """Downsample scale for building cost volume.""")
@@ -82,7 +82,7 @@ tf.app.flags.DEFINE_integer('epoch', 40,
                             """Training epoch number.""")
 tf.app.flags.DEFINE_float('val_ratio', 0,
                           """Ratio of validation set when splitting dataset.""")
-tf.app.flags.DEFINE_float('base_lr', 1e-1,
+tf.app.flags.DEFINE_float('base_lr', 1e-4,
                           """Base learning rate.""")
 tf.app.flags.DEFINE_integer('display', 1,
                             """Interval of loginfo display.""")
@@ -90,7 +90,7 @@ tf.app.flags.DEFINE_integer('stepvalue', 10000,
                             """Step interval to decay learning rate.""")
 tf.app.flags.DEFINE_integer('snapshot', 5000,
                             """Step interval to save the model.""")
-tf.app.flags.DEFINE_float('gamma', 0.9,
+tf.app.flags.DEFINE_float('gamma', 0.99,
                           """Learning rate decay rate.""")
 tf.app.flags.DEFINE_bool('inverse_depth', True,
                            """Whether to apply inverse depth for R-MVSNet""")
@@ -118,14 +118,19 @@ class MVSGenerator:
                 # img = cv2.imread(data.image[0])
                 for view in range(self.view_num):
                     img=center_image(cv2.imread(data[view].image))
-                    images.append(cv2.resize(img,(img.shape[1]/4,img.shape[0]/4)))
-                    cams.append(load_cam(open(data[view].cam)))
-
+                    images.append(img)
+                    # cam=load_cam(open(data[view].cam))
+                    cam=data[view].cam
+                    cams.append(cam)
+                
                 # depth_start=cams[0][1,3,0]
-                    depth_start = cams[0][1, 3, 0] + cams[0][1, 3, 1]
-                    depth_end = cams[0][1, 3, 0] + (FLAGS.max_d - 2) * cams[0][1, 3, 1]
-                    depth_image = load_pfm(open(data[view].depth))
-                    depth_image = mask_depth_image(depth_image, depth_start, depth_end)
+                    # depth_start = cams[0][1, 3, 0] + cams[0][1, 3, 1]
+                    # depth_end = cams[0][1, 3, 0] + (FLAGS.max_d - 2) * cams[0][1, 3, 1]
+                    # depth_image = load_pfm(open(data[view].depth))
+                    # depth_image=cv2.resize(depth_image,(depth_image.shape[1]*4,depth_image.shape[0]*4))
+             
+                    # depth_image = mask_depth_image(depth_image, depth_start, depth_end)
+                    depth_image=np.load(data[view].depth)
                     depth_images.append(depth_image)
                 # for view in range(self.view_num):
                 #
@@ -141,7 +146,7 @@ class MVSGenerator:
                 # depth_image = load_pfm(open(data.depths[0]))
                 # depth_start = cams[0][1, 3, 0] + cams[0][1, 3, 1]
                 # depth_end = cams[0][1, 3, 0] + (FLAGS.max_d - 2) * cams[0][1, 3, 1]
-                # depth_image = mask_depth_image(depth_image, depth_start, depth_end)
+                # depth_image = mask_depth_image(depth_image, 0, 10.0)
 
                 # return mvs input
                 self.counter += 1
@@ -149,10 +154,11 @@ class MVSGenerator:
                 images = np.stack(images, axis=0)
                 cams = np.stack(cams, axis=0)
                 depth_images=np.stack(depth_images,0)
-                # depth_images=depth_images[...,np.newaxis]
+                depth_images=np.expand_dims(depth_images,-1)
                 # print(depth_images.shape)
-                print('Forward pass: d_min = %f, d_max = %f.' % \
-                   (cams[0][1, 3, 0], cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]))
+               
+                # print('Forward pass: d_min = %f, d_max = %f.' % \
+                #    (cams[0][1, 3, 0], cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]))
                 yield (images, cams, depth_images)
 
                 # return backward mvs input for GRU
@@ -227,7 +233,7 @@ def train(traning_list):
         global_step = tf.Variable(0, trainable=False, name='global_step')
         lr_op = tf.train.exponential_decay(FLAGS.base_lr, global_step=global_step,
                                            decay_steps=FLAGS.stepvalue, decay_rate=FLAGS.gamma, name='lr')
-        opt = tf.train.AdamOptimizer(learning_rate=lr_op)
+        opt = tf.train.GradientDescentOptimizer(learning_rate=lr_op)
 
         global less_one_accuracy, less_three_accuracy,summaries,loss
         tower_grads = []
@@ -240,11 +246,11 @@ def train(traning_list):
                     # gray_image.set_shape(tf.TensorShape([None,None,None,1]))
                     cams.set_shape(tf.TensorShape([None, FLAGS.view_num, 2, 4, 4]))
                     depth_images.set_shape(tf.TensorShape([None,None, None, None, 1]))
-                    depth_start = tf.reshape(
-                        tf.slice(cams, [0, 0, 1, 3, 0], [FLAGS.batch_size, 1, 1, 1, 1]), [FLAGS.batch_size])
-                    depth_interval = tf.reshape(
-                        tf.slice(cams, [0, 0, 1, 3, 1], [FLAGS.batch_size, 1, 1, 1, 1]), [FLAGS.batch_size])
-                    depth_end=depth_start+depth_interval*(FLAGS.max_d-1)
+                    # depth_start = tf.reshape(
+                    #     tf.slice(cams, [0, 0, 1, 3, 0], [FLAGS.batch_size, 1, 1, 1, 1]), [FLAGS.batch_size])
+                    # depth_interval = tf.reshape(
+                    #     tf.slice(cams, [0, 0, 1, 3, 1], [FLAGS.batch_size, 1, 1, 1, 1]), [FLAGS.batch_size])
+                    # depth_end=depth_start+depth_interval*(FLAGS.max_d-1)
                     is_master_gpu = False
                     if i == 0:
                         is_master_gpu = True
@@ -369,15 +375,25 @@ def train(traning_list):
                         # probability volume
                         # prob_volume = inference_prob_recurrent_1(
                         #     images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
-                        depth_map2,depth_map1,depth_map0=depth_inference(images,cams)
-                        
-                        depth_map2=tf.clip_by_value(depth_map2,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
-                        depth_map1=tf.clip_by_value(depth_map1,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
-                        depth_map0=tf.clip_by_value(depth_map0,tf.reshape(depth_start,[]),tf.reshape(depth_end,[]))
-                        
                         depth_image1=tf.image.resize_images(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
                         depth_image0=tf.image.resize_images(depth_image,[FLAGS.max_h/4,FLAGS.max_w/4])
+
+                        depth_map2,depth_map1,depth_map0=depth_inference(images,cams)
+                        mins=tf.reduce_min(depth_image)
+                        maxs=tf.reduce_max(depth_image)
                         
+                        
+                        depth_map2=tf.clip_by_value(depth_map2,mins,maxs)
+                        depth_map1=tf.clip_by_value(depth_map1,mins,maxs)
+                        depth_map0=tf.clip_by_value(depth_map0,mins,maxs)
+                        depth_map2=(depth_map2-mins)/(maxs-mins)
+                        depth_map1=(depth_map1-mins)/(maxs-mins)
+                        depth_map0=(depth_map0-mins)/(maxs-mins)
+                        
+                        
+                        depth_image=(depth_image-mins)/(maxs-mins)
+                        depth_image0=(depth_image0-mins)/(maxs-mins)
+                        depth_image1=(depth_image1-mins)/(maxs-mins)
 
                         # if FLAGS.inverse_depth:
                         #     inv_depth_start = tf.reshape(tf.div(1.0, depth_start),[])
@@ -389,11 +405,12 @@ def train(traning_list):
                         # else:
                         #     depth_map=tf.reshape(tf.linspace(depth_start,depth_end,FLAGS.max_d),[-1,FLAGS.max_d,1,1,1,])
                         #     depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
-                        
-                        loss,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
+                        # depth_interval=tf.reshape([(maxs-mins)/100.0],[])
+                        depth_interval=tf.constant(0.01,dtype=tf.float32)
+                        loss2,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
                         loss1,_,_=mvsnet_regression_loss(depth_map1,depth_image1,depth_interval)
                         loss0,_,_=mvsnet_regression_loss(depth_map0,depth_image0,depth_interval)
-                        loss=0.8*loss+0.1*loss0+0.1*loss1
+                        loss=0.5*loss2+0.3*loss0+0.2*loss1
           
                         # K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
                         # loss_1=normal_loss(depth_map,depth_image,K)
@@ -410,7 +427,7 @@ def train(traning_list):
 
                     # calculate the gradients for the batch of data on this CIFAR tower.
                     grads = opt.compute_gradients(loss)
-
+                    grads = [(tf.clip_by_value(grad, -1., 1.), var) for grad, var in grads]
                     # keep track of the gradients across all towers.
                     tower_grads.append(grads)
 
@@ -483,9 +500,9 @@ def train(traning_list):
                     # print info
                     if step % FLAGS.display == 0:
                         print(Notify.INFO,
-                              'epoch, %d, step %d, total_step %d, loss = %.4f, (< 1px) = %.4f, (< 3px) = %.4f (%.3f sec/step)' %
-                              (epoch, step, total_step, out_loss, out_less_one, out_less_three, duration), Notify.ENDC)
-                        print(Notify.INFO,'depth min :%.4f depth max:%.4f'%(out_depth_map2.min(),out_depth_map2.max()))
+                              'epoch, %d, step %d (%.4d), total_step %d, loss = %.4f, (< 1px) = %.4f, (< 3px) = %.4f (%.3f sec/step)' %
+                              (epoch, step,step*1.0/total_step, total_step, out_loss, out_less_one, out_less_three, duration), Notify.ENDC)
+                        # print(Notify.INFO,'depth min :%.4f depth max:%.4f'%(out_depth_map2.min(),out_depth_map2.max()))
                     # write summary
                     if (total_step % (FLAGS.display * 10) == 0) and  (out_loss>0):
                         summary_writer.add_summary(out_summary_op, total_step)
@@ -503,7 +520,9 @@ def train(traning_list):
 def main(argv=None):  # pylint: disable=unused-argument
     """ program entrance """
     # Prepare all training samples
-    sample_list = gen_dtu_resized_path(FLAGS.dtu_data_root)
+    # sample_list = gen_dtu_resized_path(FLAGS.dtu_data_root)
+    sample_list=gen_demon_list(FLAGS.dtu_data_root)
+    # print((sample_list[0]))
     # sample_list1=gen_eth3d_path(FLAGS.eth3d_data_root)
     # sample_list.extend(sample_list1)
     # Shuffle

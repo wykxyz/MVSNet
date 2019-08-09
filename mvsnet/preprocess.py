@@ -238,6 +238,7 @@ class Img():
         self.image=image
         self.depth=depth
         self.dis=dis
+
 class Item():
     
     def __init__(self):
@@ -602,3 +603,38 @@ if __name__=="__main__":
     # obj=json.load(file)
     # sample_list=JSONDecoder(object_hook=from_json).decode(obj)
     print(len(sample_list))
+
+
+def gen_demon_list(train_dir):
+    train_file=os.path.join(train_dir,'train.txt')
+    
+    cluster_list = open(train_file).read().split()
+    sample_list=[]
+    for cluster in cluster_list:
+        # if cluster.find("inf")!=-1:
+        #     continue
+        train_item=os.path.join(train_dir,cluster)
+        poses=[float(x) for x in  open(os.path.join(train_item,'poses.txt')).read().split()]
+        poses=np.array(poses).reshape(-1,3,4)
+        intrinsic=[float(x) for x in  open(os.path.join(train_item,'cam.txt')).read().split()]
+        intrinsic=np.array(intrinsic).reshape(3,3)
+        
+        item=[]
+        for index in range(poses.shape[0]) :
+            img=os.path.join(train_item,"%04d.jpg"%index)
+            depth=os.path.join(train_item,"%04d.npy"%index)
+            cam=np.zeros([2,4,4])
+            cam[0,:3,:]=poses[index]
+            cam[1,:3,:3]=intrinsic
+            item.append(Img(img,cam,depth,0))
+            
+        if len(item)<3:
+            continue
+        # print(item)
+        items=[[item,x[0],x[1]] for x in list(combinations(item[1:], 2))]
+        
+        sample_list.append(item)
+    return sample_list
+
+
+        
