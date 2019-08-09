@@ -507,3 +507,58 @@ def tf_transform_homography(input_image, homography):
     # return input_image
     return warped_image
 
+def validflow(left_cam,right_cam,depth_map,max_flow):
+    """
+
+    :param input_image:
+    :param left_cam:
+    :param right_cam:
+    :param depth_map: b,h,w,1
+    :return:
+    """
+    with tf.name_scope('warping_by_homography'):
+        image_shape = tf.shape(depth_map)
+        batch_size = image_shape[0]
+        height = image_shape[1]
+        width = image_shape[2]
+        pixel_grids = get_pixel_grids(height, width)
+        
+        pixel_grids = tf.expand_dims(pixel_grids, 0)
+        pixel_grids = tf.tile(pixel_grids, [batch_size, 1])
+       
+        pixel_grids = tf.reshape(pixel_grids, (batch_size, 3, -1))#b,3,[hxw]
+        x_coords=tf.slice(pixel_grids,[0,0,0],[-1,1,-1])#b,1,[hxw]
+        depth_flatten=tf.reshape(depth_map,(batch_size,1,-1))#b,1,[hxw]
+        pixel_grids=pixel_grids*depth_flatten
+        R_left = tf.slice(left_cam, [0, 0, 0, 0], [-1, 1, 3, 3])
+        R_right = tf.slice(right_cam, [0, 0, 0, 0], [-1, 1, 3, 3])
+        t_left = tf.slice(left_cam, [0, 0, 0, 3], [-1, 1, 3, 1])
+        t_right = tf.slice(right_cam, [0, 0, 0, 3], [-1, 1, 3, 1])
+        K_left = tf.slice(left_cam, [0, 1, 0, 0], [-1, 1, 3, 3])
+        K_right = tf.slice(right_cam, [0, 1, 0, 0], [-1, 1, 3, 3])
+        K_left_inv = tf.squeeze(tf.matrix_inverse(K_left),1)
+        # K_right=tf.squeeze(K_right,1)
+        R_left_trans = tf.transpose(tf.squeeze(R_left, axis=1), perm=[0, 2, 1])
+        R_right_trans = tf.transpose(tf.squeeze(R_right, axis=1), perm=[0, 2, 1])
+        c_left = -tf.matmul(R_left_trans, tf.squeeze(t_left, axis=1))
+        c_right = -tf.matmul(R_right_trans, tf.squeeze(t_right, axis=1))  # (B, D, 3, 1)
+        c_relative = tf.subtract(c_right, c_left)#b,3,1
+        middle_mat1 = tf.matmul(R_left_trans, K_left_inv)#b,3,3
+        middle_mat2 = tf.squeeze(tf.matmul(K_right, R_right),1)  # b,3,3
+        pixel_grids=tf.matmul(middle_mat1,pixel_grids)#b,3,[h,w]
+        pixel_grids=tf.subtract(pixel_grids,c_relative)
+        pixel_grids=tf.matmul(middle_mat2,pixel_grids)
+        grids_div=tf.slice(pixel_grids,[0,2,0],[-1,1,-1])#b,1,[h,w]
+        grids_zero_add = tf.cast(tf.equal(grids_div, 0.0), dtype='float32') * 1e-7  # handle div 0
+        # grids_div = grids_div + grids_zero_add
+        grids_divs = tf.tile(grids_div+ grids_zero_add, [1, 2, 1])
+        grids_affine=tf.slice(pixel_grids,[0,0,0],[-1,2,-1])
+        grids_inv_warped = tf.div(grids_affine, grids_divs)
+        x_warped, y_warped = tf.unstack(grids_inv_warped, axis=1)
+        # x_warped=tf.reshape(x_warped,[batch_size,height,width,1])
+        # mask=tf.abs(x_warped-x_coords)<max_flow
+        mask=tf.cast((x_warped<0.0 )&(x_warped>=tf.cast(width,tf.float32)),tf.float32)
+        disp=(x_warped-x_coords)*mask
+        disp=tf.cast(disp<max_flow,tf.float32)*disp
+        disp=tf.reshape(disp,tf.shape(depth_map))
+        return disp

@@ -626,13 +626,17 @@ def gen_demon_list(train_dir):
             cam=np.zeros([2,4,4])
             cam[0,:3,:]=poses[index]
             cam[1,:3,:3]=intrinsic
-            item.append(Img(img,cam,depth,0))
+            c=np.matmul(-cam[0,:3,:3].transpose(),cam[0,:3,3])
+            if len(item)==0:
+                item.append(Img(img,cam,depth,c[0]))
+            item.append(Img(img,cam,depth,-abs(item[0].dis-c[0])))
             
         if len(item)<3:
             continue
+        item[1:]=sorted(item[1:],cmp=lambda x,y:cmp(x.dis,y.dis))
         # print(item)
-        items=[[item,x[0],x[1]] for x in list(combinations(item[1:], 2))]
-        
+        # items=[[item,x[0],x[1]] for x in list(combinations(item[1:], 2))]
+        # items=list(combinations(item[1:], 3))
         sample_list.append(item)
     return sample_list
 
