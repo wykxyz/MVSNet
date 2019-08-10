@@ -66,8 +66,6 @@ tf.app.flags.DEFINE_float('sample_scale', 0.25,
                             """Downsample scale for building cost volume.""")
 tf.app.flags.DEFINE_float('interval_scale', 1.06,
                             """Downsample scale for building cost volume.""")
-tf.app.flags.DEFINE_float('disp_size', 40,
-                            """Downsample scale for building cost volume.""")
 
 # network architectures
 tf.app.flags.DEFINE_string('regularization', 'GRU',
@@ -80,11 +78,11 @@ tf.app.flags.DEFINE_integer('num_gpus',1,
                             """Number of GPUs.""")
 tf.app.flags.DEFINE_integer('batch_size', 1,
                             """Training batch size.""")
-tf.app.flags.DEFINE_integer('epoch', 80,
+tf.app.flags.DEFINE_integer('epoch', 40,
                             """Training epoch number.""")
 tf.app.flags.DEFINE_float('val_ratio', 0,
                           """Ratio of validation set when splitting dataset.""")
-tf.app.flags.DEFINE_float('base_lr', 1e-3,
+tf.app.flags.DEFINE_float('base_lr', 1e-4,
                           """Base learning rate.""")
 tf.app.flags.DEFINE_integer('display', 1,
                             """Interval of loginfo display.""")
@@ -96,6 +94,8 @@ tf.app.flags.DEFINE_float('gamma', 0.99,
                           """Learning rate decay rate.""")
 tf.app.flags.DEFINE_bool('inverse_depth', True,
                            """Whether to apply inverse depth for R-MVSNet""")
+tf.app.flags.DEFINE_float('disp_size', 80,
+                            """Downsample scale for building cost volume.""")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -259,18 +259,12 @@ def train(traning_list):
                         is_master_gpu = True
                     depth_image = tf.squeeze(
                         tf.slice(depth_images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, 1]), axis=1)
-                    ref_cam=tf.squeeze(tf.slice(cams,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
                     view_cam=tf.squeeze(tf.slice(cams,[0,1,0,0,0],[-1,1,-1,-1,-1]),1)
-                    disp=validflow(ref_cam,view_cam,depth_image,FLAGS.disp_size*4/2.0)
-                  
-                
-                    view_depth=tf.squeeze(tf.slice(depth_images,[0,1,0,0,0],[-1,1,-1,-1,-1]),1)
-
-                    warp_depth,_,m=reprojection_depth(input_image=view_depth,left_cam=ref_cam,right_cam=view_cam,depth_map=depth_image)
-                    mask=tf.cast(tf.less_equal(tf.abs(warp_depth-depth_image),tf.abs(1.0))&m,tf.float32)
-                    disp_image=disp*mask
+                    ref_cam=tf.squeeze(tf.slice(cams,[0,0,0,0,0],[-1,1,-1,-1,-1]),1)
                     
-
+                    disp=validflow(ref_cam,view_cam,depth_image,FLAGS.disp_size*4/2.0)
+                    mask=tf.cast(disp<FLAGS.disp_size*4/2.0,tf.float32)
+                    depth_image=depth_image*mask
                     # ref_depth = tf.squeeze(tf.slice(depth_images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, -1]),1)
                     # mask=tf.ones_like(depth_image,dtype=tf.float32)
                     # for view in range(1,FLAGS.view_num):
@@ -388,34 +382,18 @@ def train(traning_list):
 
                         # probability volume
                         # prob_volume = inference_prob_recurrent_1(
-                        
                         #     images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
-                        disp_image2=disp_image
-                        disp_image1=tf.image.resize_images(disp_image,[FLAGS.max_h/2,FLAGS.max_w/2])
-                        disp_image0=tf.image.resize_images(disp_image,[FLAGS.max_h/4,FLAGS.max_w/4])
-                        disp_image1/=2.0
-                        disp_image0/=4.0
-                        disp0,disp1,disp2,cost0,cost1,cost2,depth_map=depth_inference(images,cams)
-                        gt_index0=tf.argmin(tf.expand_dims(disp_image0,1)-disp0,axis=1)
-                        gt_index1=tf.argmin(tf.expand_dims(disp_image1,1)-disp1,axis=1)
-                        gt_index2=tf.argmin(tf.expand_dims(disp_image,1)-disp2,axis=1)
-                        gt_0=tf.one_hot(gt_index0,tf.shape(cost0)[1],axis=1)
-                        gt_1=tf.one_hot(gt_index1,tf.shape(cost1)[1],axis=1)
-                        gt_2=tf.one_hot(gt_index2,tf.shape(cost2)[1],axis=1)
-                        mask0=tf.cast(disp_image0!=0.0,tf.float32)
-                        mask1=tf.cast(disp_image1!=0.0,tf.float32)
-                        mask2=tf.cast(disp_image!=0.0,tf.float32)
-                        
-                        loss0=tf.reduce_sum(-tf.reduce_sum(tf.cast(gt_0,tf.float32) * tf.log(cost0), axis=1)*mask0)/(tf.count_nonzero(mask0,dtype=tf.float32)+1e-7)
-                        loss1=tf.reduce_sum(-tf.reduce_sum(tf.cast(gt_1,tf.float32) * tf.log(cost1), axis=1)*mask1)/(tf.count_nonzero(mask1,dtype=tf.float32)+1e-7)
-                        loss2=tf.reduce_sum(-tf.reduce_sum(tf.cast(gt_2,tf.float32) * tf.log(cost2), axis=1)*mask2)/(tf.count_nonzero(mask2,dtype=tf.float32)+1e-7)
-                        loss=(0.2*loss0+0.3*loss1+0.5*loss2)/FLAGS.max_w
+                        depth_image1=tf.image.resize_images(depth_image,[FLAGS.max_h/2,FLAGS.max_w/2])
+                        depth_image0=tf.image.resize_images(depth_image,[FLAGS.max_h/4,FLAGS.max_w/4])
+
+                        depth_map2,depth_map1,depth_map0=depth_inference(images,cams)
+                        mins=tf.reduce_min(depth_image)
+                        maxs=tf.reduce_max(depth_image)
                         
                         
-                        
-                        # depth_map2=tf.clip_by_value(depth_map2,0.5,32)
-                        # depth_map1=tf.clip_by_value(depth_map1,0.5,32)
-                        # depth_map0=tf.clip_by_value(depth_map0,0.5,32)
+                        depth_map2=tf.clip_by_value(depth_map2,0.5,32)
+                        depth_map1=tf.clip_by_value(depth_map1,0.5,32)
+                        depth_map0=tf.clip_by_value(depth_map0,0.5,32)
                         # depth_map2=(depth_map2-mins)/(maxs-mins)
                         # depth_map1=(depth_map1-mins)/(maxs-mins)
                         # depth_map0=(depth_map0-mins)/(maxs-mins)
@@ -437,10 +415,10 @@ def train(traning_list):
                         #     depth_map=tf.reduce_sum(depth_map*prob_volume,axis=1)
                         # depth_interval=tf.reshape([(maxs-mins)/100.0],[])
                         depth_interval=tf.constant(0.1,dtype=tf.float32)
-                        _,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map,depth_image,depth_interval)
-                        # loss1,_,_=mvsnet_regression_loss(depth_map1,depth_image1,depth_interval)
-                        # loss0,_,_=mvsnet_regression_loss(depth_map0,depth_image0,depth_interval)
-                        # loss=0.5*loss2+0.3*loss0+0.2*loss1
+                        loss2,less_one_accuracy,less_three_accuracy=mvsnet_regression_loss(depth_map2,depth_image,depth_interval)
+                        loss1,_,_=mvsnet_regression_loss(depth_map1,depth_image1,depth_interval)
+                        loss0,_,_=mvsnet_regression_loss(depth_map0,depth_image0,depth_interval)
+                        loss=0.5*loss2+0.3*loss0+0.2*loss1
           
                         # K=tf.reshape(tf.slice(cams,[0,0,1,0,0],[-1,1,1,3,3]),[-1,3,3])
                         # loss_1=normal_loss(depth_map,depth_image,K)
@@ -520,8 +498,8 @@ def train(traning_list):
                     # run one batch
                     start_time = time.time()
                     try:
-                        out_summary_op, out_opt, out_loss, out_less_one, out_less_three = sess.run(
-                            [summary_op, train_opt, loss, less_one_accuracy, less_three_accuracy])
+                        out_summary_op, out_opt, out_loss, out_less_one, out_less_three,out_depth_map2 = sess.run(
+                            [summary_op, train_opt, loss, less_one_accuracy, less_three_accuracy,depth_map2])
                     except tf.errors.OutOfRangeError:
                         print("End of dataset")  # ==> "End of dataset"
                         break
