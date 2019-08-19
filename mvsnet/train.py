@@ -266,7 +266,7 @@ def train(traning_list):
                     elif FLAGS.regularization == 'GRU':
 
                         # probability volume
-                        prob_volume = inference_prob_recurrent(
+                        prob_volume = inference_prob_recurrent_wori(
                             images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
 
                         # classification loss
@@ -383,6 +383,7 @@ def main(argv=None):  # pylint: disable=unused-argument
     # Shuffle
     random.shuffle(sample_list)
     # Training entrance.
+    #print(FLAGS)
     train(sample_list)
 
 
