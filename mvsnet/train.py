@@ -150,6 +150,8 @@ def average_gradients(tower_grads):
         #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
         grads = []
         for g, _ in grad_and_vars:
+            #print(g)
+            #print(g.shape)
             # Add 0 dimension to the gradients to represent the tower.
             expanded_g = tf.expand_dims(g, 0)
 
@@ -278,6 +280,26 @@ def train(traning_list):
 
                         # probability volume
                         prob_volume = inference_prob_recurrent_w(
+                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+
+                        # classification loss
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+                    elif FLAGS.regularization == 'GRU_WGATE':
+
+                        # probability volume
+                        prob_volume = inference_prob_recurrent_wgate(
+                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+
+                        # classification loss
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+                    elif FLAGS.regularization == 'GRU_WGATECOS':
+
+                        # probability volume
+                        prob_volume = inference_prob_recurrent_wgatecos(
                             images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
 
                         # classification loss

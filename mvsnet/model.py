@@ -13,6 +13,8 @@ sys.path.append("../")
 from cnn_wrapper.mvsnet import *
 from convgru import ConvGRUCell
 from homography_warping import *
+from cnn_wrapper.gatenet import *
+
 import gc
 
 FLAGS = tf.app.flags.FLAGS
@@ -341,7 +343,7 @@ def inference_mem(images, cams, depth_num, depth_start, depth_interval, is_maste
     # return filtered_depth_map, 
     return estimated_depth_map, prob_map
 
-
+# check dimension default data format BHWC
 def inference_prob_recurrent_w(images, cams, depth_num, depth_start, depth_interval, is_master_gpu=True):
     """ infer disparity image from stereo images and cameras """
 
@@ -391,7 +393,7 @@ def inference_prob_recurrent_w(images, cams, depth_num, depth_start, depth_inter
         # forward cost volume
         depth_costs = []
         for d in range(depth_num):
-
+            # BHWC
             # compute cost (variation metric)
             ave_feature = ref_tower.get_output()
             ave_feature2 = tf.zeros(tf.shape(ave_feature))  # square
@@ -406,20 +408,17 @@ def inference_prob_recurrent_w(images, cams, depth_num, depth_start, depth_inter
                 warped_view_feature_list.append(warped_view_feature)
                 # ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
             ave_feature = ave_feature / FLAGS.view_num
-            norm_a = tf.nn.l2_normalize(ave_feature, 0)
-
+            norm_a = tf.nn.l2_normalize(ave_feature, 3) # c norm
             # caculate weighted volume
             for view in range(0, FLAGS.view_num - 1):
-                norm_b = tf.nn.l2_normalize(warped_view_feature_list[view], 0)
+                norm_b = tf.nn.l2_normalize(warped_view_feature_list[view], 3)
                 # weight_f = tf.losses.cosine_distance(norm_a, norm_b, dim=0)
-                weight_f = tf.reduce_sum(tf.multiply(norm_a, norm_b), 0, keepdims=True)
+                weight_f = tf.reduce_sum(tf.multiply(norm_a, norm_b), 3, keepdims=True)
                 # print(weight_f)
-                weight_f_rep = tf.tile(weight_f, [tf.shape(norm_a)[0], 1, 1, 1]) + 1
-                ave_feature2 += tf.multiply(weight_f_rep, warped_view_feature_list[view] - ave_feature)
-
+                weight_f_rep = tf.tile(weight_f, [1, 1, 1, tf.shape(norm_a)[0]]) + 1
+                ave_feature2 += tf.multiply(weight_f_rep, tf.square(warped_view_feature_list[view] - ave_feature))
 
             cost = ave_feature2 / FLAGS.view_num
-            del warped_view_feature_list
 
             # gru
             reg_cost1, state1 = conv_gru1(-cost, state1, scope='conv_gru1')
@@ -434,6 +433,191 @@ def inference_prob_recurrent_w(images, cams, depth_num, depth_start, depth_inter
 
     return prob_volume
 
+
+def inference_prob_recurrent_wgate(images, cams, depth_num, depth_start, depth_interval, is_master_gpu=True):
+    """ infer disparity image from stereo images and cameras """
+
+    # dynamic gpu params
+    depth_end = depth_start + (tf.cast(depth_num, tf.float32) - 1) * depth_interval
+
+    # reference image
+    ref_image = tf.squeeze(tf.slice(images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, 3]), axis=1)
+    ref_cam = tf.squeeze(tf.slice(cams, [0, 0, 0, 0, 0], [-1, 1, 2, 4, 4]), axis=1)
+
+    # image feature extraction
+    if is_master_gpu:
+        ref_tower = UNetDS2GN({'data': ref_image}, is_training=True, reuse=False)
+    else:
+        ref_tower = UNetDS2GN({'data': ref_image}, is_training=True, reuse=True)
+    view_towers = []
+    for view in range(1, FLAGS.view_num):
+        view_image = tf.squeeze(tf.slice(images, [0, view, 0, 0, 0], [-1, 1, -1, -1, -1]), axis=1)
+        view_tower = UNetDS2GN({'data': view_image}, is_training=True, reuse=True)
+        view_towers.append(view_tower)
+
+    # get all homographies
+    view_homographies = []
+    for view in range(1, FLAGS.view_num):
+        view_cam = tf.squeeze(tf.slice(cams, [0, view, 0, 0, 0], [-1, 1, 2, 4, 4]), axis=1)
+        homographies = get_homographies(ref_cam, view_cam, depth_num=depth_num,
+                                        depth_start=depth_start, depth_interval=depth_interval)
+        view_homographies.append(homographies)
+
+    gru1_filters = 16
+    gru2_filters = 4
+    gru3_filters = 2
+    feature_shape = [FLAGS.batch_size, FLAGS.max_h / 4, FLAGS.max_w / 4, 32]
+    gru_input_shape = [feature_shape[1], feature_shape[2]]
+    state1 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru1_filters])
+    state2 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru2_filters])
+    state3 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru3_filters])
+    conv_gru1 = ConvGRUCell(shape=gru_input_shape, kernel=[3, 3], filters=gru1_filters)
+    conv_gru2 = ConvGRUCell(shape=gru_input_shape, kernel=[3, 3], filters=gru2_filters)
+    conv_gru3 = ConvGRUCell(shape=gru_input_shape, kernel=[3, 3], filters=gru3_filters)
+
+    exp_div = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], 1])
+    soft_depth_map = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], 1])
+
+    with tf.name_scope('cost_volume_homography'):
+
+        # forward cost volume
+        depth_costs = []
+        for d in range(depth_num):
+            # BHWC
+            # compute cost (variation metric)
+            ave_feature = ref_tower.get_output()
+            ave_feature2 = tf.zeros(tf.shape(ave_feature))  # square
+            # print('debug in model: ', tf.shape(ave_feature))
+            warped_view_feature_list = []
+            for view in range(0, FLAGS.view_num - 1):  # caculate average mean
+                homography = tf.slice(view_homographies[view], begin=[0, d, 0, 0], size=[-1, 1, 3, 3])
+                homography = tf.squeeze(homography, axis=1)
+                # warped_view_feature = homography_warping(view_towers[view].get_output(), homography)
+                warped_view_feature = tf_transform_homography(view_towers[view].get_output(), homography)
+                ave_feature += warped_view_feature
+                warped_view_feature_list.append(warped_view_feature)
+                # ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
+            ave_feature = ave_feature / FLAGS.view_num
+            #norm_a = tf.nn.l2_normalize(ave_feature, 3)  # c norm
+            # caculate weighted volume
+            for view in range(0, FLAGS.view_num - 1):
+                #norm_b = tf.nn.l2_normalize(warped_view_feature_list[view], 3)
+                # weight_f = tf.losses.cosine_distance(norm_a, norm_b, dim=0)
+                #weight_f = tf.reduce_sum(tf.multiply(norm_a, norm_b), 0, keepdims=True)
+                feature_delta2 = tf.square(warped_view_feature_list[view] - ave_feature)
+                # print('debug in model')
+                # print(feature_delta2.shape())
+                weight_f = tf.reduce_sum(feature_delta2, 3, keepdims=True)
+                # auto reuse
+                gate_w = Gatenet({'data': weight_f}, is_training=True, reuse=tf.AUTO_REUSE)
+                gate_w_delta = gate_w.get_output() + 1
+                ave_feature2 += tf.multiply(gate_w_delta, feature_delta2)
+
+            cost = ave_feature2 / FLAGS.view_num
+
+            # gru
+            reg_cost1, state1 = conv_gru1(-cost, state1, scope='conv_gru1')
+            reg_cost2, state2 = conv_gru2(reg_cost1, state2, scope='conv_gru2')
+            reg_cost3, state3 = conv_gru3(reg_cost2, state3, scope='conv_gru3')
+            reg_cost = tf.layers.conv2d(
+                reg_cost3, 1, 3, padding='same', reuse=tf.AUTO_REUSE, name='prob_conv')
+            depth_costs.append(reg_cost)
+
+        prob_volume = tf.stack(depth_costs, axis=1)
+        prob_volume = tf.nn.softmax(prob_volume, axis=1, name='prob_volume')
+
+    return prob_volume
+
+def inference_prob_recurrent_wgatecos(images, cams, depth_num, depth_start, depth_interval, is_master_gpu=True):
+    """ infer disparity image from stereo images and cameras """
+
+    # dynamic gpu params
+    depth_end = depth_start + (tf.cast(depth_num, tf.float32) - 1) * depth_interval
+
+    # reference image
+    ref_image = tf.squeeze(tf.slice(images, [0, 0, 0, 0, 0], [-1, 1, -1, -1, 3]), axis=1)
+    ref_cam = tf.squeeze(tf.slice(cams, [0, 0, 0, 0, 0], [-1, 1, 2, 4, 4]), axis=1)
+
+    # image feature extraction
+    if is_master_gpu:
+        ref_tower = UNetDS2GN({'data': ref_image}, is_training=True, reuse=False)
+    else:
+        ref_tower = UNetDS2GN({'data': ref_image}, is_training=True, reuse=True)
+    view_towers = []
+    for view in range(1, FLAGS.view_num):
+        view_image = tf.squeeze(tf.slice(images, [0, view, 0, 0, 0], [-1, 1, -1, -1, -1]), axis=1)
+        view_tower = UNetDS2GN({'data': view_image}, is_training=True, reuse=True)
+        view_towers.append(view_tower)
+
+    # get all homographies
+    view_homographies = []
+    for view in range(1, FLAGS.view_num):
+        view_cam = tf.squeeze(tf.slice(cams, [0, view, 0, 0, 0], [-1, 1, 2, 4, 4]), axis=1)
+        homographies = get_homographies(ref_cam, view_cam, depth_num=depth_num,
+                                        depth_start=depth_start, depth_interval=depth_interval)
+        view_homographies.append(homographies)
+
+    gru1_filters = 16
+    gru2_filters = 4
+    gru3_filters = 2
+    feature_shape = [FLAGS.batch_size, FLAGS.max_h / 4, FLAGS.max_w / 4, 32]
+    gru_input_shape = [feature_shape[1], feature_shape[2]]
+    state1 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru1_filters])
+    state2 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru2_filters])
+    state3 = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], gru3_filters])
+    conv_gru1 = ConvGRUCell(shape=gru_input_shape, kernel=[3, 3], filters=gru1_filters)
+    conv_gru2 = ConvGRUCell(shape=gru_input_shape, kernel=[3, 3], filters=gru2_filters)
+    conv_gru3 = ConvGRUCell(shape=gru_input_shape, kernel=[3, 3], filters=gru3_filters)
+
+    exp_div = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], 1])
+    soft_depth_map = tf.zeros([FLAGS.batch_size, feature_shape[1], feature_shape[2], 1])
+
+    with tf.name_scope('cost_volume_homography'):
+
+        # forward cost volume
+        depth_costs = []
+        for d in range(depth_num):
+            # BHWC
+            # compute cost (variation metric)
+            ave_feature = ref_tower.get_output()
+            ave_feature2 = tf.zeros(tf.shape(ave_feature))  # square
+            # print('debug in model: ', tf.shape(ave_feature))
+            warped_view_feature_list = []
+            for view in range(0, FLAGS.view_num - 1):  # caculate average mean
+                homography = tf.slice(view_homographies[view], begin=[0, d, 0, 0], size=[-1, 1, 3, 3])
+                homography = tf.squeeze(homography, axis=1)
+                # warped_view_feature = homography_warping(view_towers[view].get_output(), homography)
+                warped_view_feature = tf_transform_homography(view_towers[view].get_output(), homography)
+                ave_feature += warped_view_feature
+                warped_view_feature_list.append(warped_view_feature)
+                # ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
+            ave_feature = ave_feature / FLAGS.view_num
+            norm_a = tf.nn.l2_normalize(ave_feature, 3)  # c norm
+            # caculate weighted volume
+            for view in range(0, FLAGS.view_num - 1):
+                norm_b = tf.nn.l2_normalize(warped_view_feature_list[view], 3)
+                weight_f = tf.reduce_sum(tf.multiply(norm_a, norm_b), 3, keepdims=True)
+
+                feature_delta2 = tf.square(warped_view_feature_list[view] - ave_feature)
+                # auto reuse
+                gate_w = Gatenet({'data': weight_f}, is_training=True, reuse=tf.AUTO_REUSE)
+                gate_w_delta = gate_w.get_output() + 1
+                ave_feature2 += tf.multiply(gate_w_delta, feature_delta2)
+
+            cost = ave_feature2 / FLAGS.view_num
+
+            # gru
+            reg_cost1, state1 = conv_gru1(-cost, state1, scope='conv_gru1')
+            reg_cost2, state2 = conv_gru2(reg_cost1, state2, scope='conv_gru2')
+            reg_cost3, state3 = conv_gru3(reg_cost2, state3, scope='conv_gru3')
+            reg_cost = tf.layers.conv2d(
+                reg_cost3, 1, 3, padding='same', reuse=tf.AUTO_REUSE, name='prob_conv')
+            depth_costs.append(reg_cost)
+
+        prob_volume = tf.stack(depth_costs, axis=1)
+        prob_volume = tf.nn.softmax(prob_volume, axis=1, name='prob_volume')
+
+    return prob_volume
 
 def inference_prob_recurrent_wori(images, cams, depth_num, depth_start, depth_interval, is_master_gpu=True):
     """ infer disparity image from stereo images and cameras """
@@ -499,16 +683,10 @@ def inference_prob_recurrent_wori(images, cams, depth_num, depth_start, depth_in
                 warped_view_feature_list.append(warped_view_feature)
                 # ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
             ave_feature = ave_feature / FLAGS.view_num
-            #norm_a = tf.nn.l2_normalize(ave_feature, 0)
 
             # caculate weighted volume
             for view in range(0, FLAGS.view_num - 1):
-                #norm_b = tf.nn.l2_normalize(warped_view_feature_list[view], 0)
-                # weight_f = tf.losses.cosine_distance(norm_a, norm_b, dim=0)
-                #weight_f = tf.reduce_sum(tf.multiply(norm_a, norm_b), 0, keepdims=True)
-                # print(weight_f)
-                #weight_f_rep = tf.tile(weight_f, [tf.shape(norm_a)[0], 1, 1, 1]) + 1
-                ave_feature2 += tf.multiply(weight_f_rep, norm_a - norm_b)
+                ave_feature2 += tf.square(warped_view_feature_list[view] - ave_feature)
 
             cost = ave_feature2 / FLAGS.view_num
             del warped_view_feature_list
