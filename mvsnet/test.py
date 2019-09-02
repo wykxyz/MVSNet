@@ -193,14 +193,9 @@ def mvsnet_pipeline(mvs_list):
                 init_depth_map, ref_image, FLAGS.max_d, depth_start, depth_interval, True)
 
     # depth map inference using GRU
-    elif FLAGS.regularization == 'GRU':
+    elif FLAGS.regularization == 'GRU' or FLAGS.regularization == 'GRU_WGATE':
         init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
-            depth_num, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
-    elif FLAGS.regularization == 'GRU_WGATE':
-
-        # probability volume
-        prob_volume = inference_prob_recurrent_wgate(
-            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+            depth_num, depth_start, depth_end, reg_type=FLAGS.regularization, inverse_depth=FLAGS.inverse_depth)
 
     # init option
     init_op = tf.global_variables_initializer()

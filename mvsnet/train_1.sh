@@ -13,10 +13,10 @@ srun --mpi=pmi2 --gres=gpu:${n}  \
         -p $part -n1 \
         --ntasks-per-node=1 \
         -J $name -K \
-        python -u train.py \
+        python2 -u train.py \
         --num_gpus=$n \
         --regularization=$model \
-        --dtu_data_root=/mnt/lustre/yihongwei/yihongwei/dataset/dtu \
+        --dtu_data_root=/mnt/lustre/share/yihongwei/dataset/dtu \
         --view_num=${view} \
         --max_d=${max_d} \
         --log_dir=../tf_log/${name} \

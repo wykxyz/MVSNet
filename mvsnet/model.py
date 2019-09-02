@@ -845,23 +845,55 @@ def inference_winner_take_all(images, cams, depth_num, depth_start, depth_end,
     # define winner take all loop
     def body(depth_index, state1, state2, state3, depth_image, max_prob_image, exp_sum, incre):
         """Loop body."""
+        if reg_type=='GRU':
+            # calculate cost 
+            ave_feature = ref_tower.get_output()
+            ave_feature2 = tf.square(ref_tower.get_output())
+            for view in range(0, FLAGS.view_num - 1):
+                homographies = view_homographies[view]
+                homographies = tf.transpose(homographies, perm=[1, 0, 2, 3])
+                homography = homographies[depth_index]
+                # warped_view_feature = homography_warping(view_towers[view].get_output(), homography)
+                warped_view_feature = tf_transform_homography(view_towers[view].get_output(), homography)
+                ave_feature = ave_feature + warped_view_feature
+                ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
+            ave_feature = ave_feature / FLAGS.view_num
+            ave_feature2 = ave_feature2 / FLAGS.view_num
+            cost = ave_feature2 - tf.square(ave_feature)
+        elif reg_type=='GRU_WGATE':
+            print('define body in test: ', reg_type)
+            ave_feature = ref_tower.get_output()
+            ave_feature2 = tf.zeros(tf.shape(ave_feature))  # square
+            # print('debug in model: ', tf.shape(ave_feature))
+            warped_view_feature_list = []
+            for view in range(0, FLAGS.view_num - 1):  # caculate average mean
+                homographies = view_homographies[view]
+                homographies = tf.transpose(homographies, perm=[1, 0, 2, 3])
+                homography = homographies[depth_index]
+                # warped_view_feature = homography_warping(view_towers[view].get_output(), homography)
+                warped_view_feature = tf_transform_homography(view_towers[view].get_output(), homography)
+                ave_feature += warped_view_feature
+                warped_view_feature_list.append(warped_view_feature)
+                # ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
+            ave_feature = ave_feature / FLAGS.view_num
+            #norm_a = tf.nn.l2_normalize(ave_feature, 3)  # c norm
+            # caculate weighted volume
+            for view in range(0, FLAGS.view_num - 1):
+                #norm_b = tf.nn.l2_normalize(warped_view_feature_list[view], 3)
+                # weight_f = tf.losses.cosine_distance(norm_a, norm_b, dim=0)
+                #weight_f = tf.reduce_sum(tf.multiply(norm_a, norm_b), 0, keepdims=True)
+                feature_delta2 = tf.square(warped_view_feature_list[view] - ave_feature)
+                # print('debug in model')
+                # print(feature_delta2.shape())
+                weight_f = tf.reduce_sum(feature_delta2, 3, keepdims=True)
+                # auto reuse
+                gate_w = Gatenet({'data': weight_f}, is_training=True, reuse=tf.AUTO_REUSE)
+                gate_w_delta = gate_w.get_output() + 1
+                ave_feature2 += tf.multiply(gate_w_delta, feature_delta2)
 
-        # calculate cost 
-        ave_feature = ref_tower.get_output()
-        ave_feature2 = tf.square(ref_tower.get_output())
-        for view in range(0, FLAGS.view_num - 1):
-            homographies = view_homographies[view]
-            homographies = tf.transpose(homographies, perm=[1, 0, 2, 3])
-            homography = homographies[depth_index]
-            # warped_view_feature = homography_warping(view_towers[view].get_output(), homography)
-            warped_view_feature = tf_transform_homography(view_towers[view].get_output(), homography)
-            ave_feature = ave_feature + warped_view_feature
-            ave_feature2 = ave_feature2 + tf.square(warped_view_feature)
-        ave_feature = ave_feature / FLAGS.view_num
-        ave_feature2 = ave_feature2 / FLAGS.view_num
-        cost = ave_feature2 - tf.square(ave_feature)
+            cost = ave_feature2 / FLAGS.view_num
+
         cost.set_shape([FLAGS.batch_size, feature_shape[1], feature_shape[2], 32])
-
         # gru
         reg_cost1, state1 = conv_gru1(-cost, state1, scope='conv_gru1')
         reg_cost2, state2 = conv_gru2(reg_cost1, state2, scope='conv_gru2')
