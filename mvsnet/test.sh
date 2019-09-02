@@ -10,5 +10,6 @@ srun --mpi=pmi2 --gres=gpu:${n}  \
         --regularization='GRU_WGATE' \
         --model_dir=../model/0808/4_GRU_WGATE_v3_d128_square_channel_sum3 \
         --ckpt_step=160000 \
-        --dense_folder=/mnt/lustre/share/yihongwei/dataset/mvs-test/family \
+        --dense_folder=/mnt/lustre/share/yihongwei/dataset/mvs-test/horse \
+        --upsampling=False \
         --/mnt/lustre/share/yihongwei/dataset &

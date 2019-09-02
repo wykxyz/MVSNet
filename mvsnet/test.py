@@ -50,7 +50,8 @@ tf.app.flags.DEFINE_integer('batch_size', 1,
                             """Testing batch size.""")
 tf.app.flags.DEFINE_bool('adaptive_scaling', True, 
                             """Let image size to fit the network, including 'scaling', 'cropping'""")
-
+tf.app.flags.DEFINE_bool('upsampling', False, 
+                            """Upsample prob depth map twice """)
 # network architecture
 tf.app.flags.DEFINE_string('regularization', 'GRU',
                            """Regularization method, including '3DCNNs' and 'GRU'""")
@@ -149,7 +150,8 @@ def mvsnet_pipeline(mvs_list):
     print ('sample number: ', len(mvs_list))
 
     # create output folder
-    output_folder = os.path.join(FLAGS.dense_folder, 'depths_mvsnet')
+    tmp = time.strftime("%m%d%H%M%S", time.localtime())
+    output_folder = os.path.join(FLAGS.dense_folder, tmp + '_depths_mvsnet')
     if not os.path.isdir(output_folder):
         os.mkdir(output_folder)
 
@@ -251,6 +253,12 @@ def mvsnet_pipeline(mvs_list):
             out_ref_image_path = output_folder + ('/%08d.jpg' % out_index)
             out_ref_cam_path = output_folder + ('/%08d.txt' % out_index)
 
+            if FLAGS.upsampling:        
+                out_ref_image = cv2.resize(out_ref_image, (out_ref_image.shape[1] * 2, out_ref_image.shape[0] * 2))
+                out_ref_cam[1, :2, :3] *= 2.0
+                out_init_depth_image = cv2.resize(out_init_depth_image, (out_ref_image.shape[1], out_ref_image.shape[0]))
+                out_prob_map = cv2.resize(out_prob_map, (out_ref_image.shape[1], out_ref_image.shape[0]))
+     
             # save output
             write_pfm(init_depth_map_path, out_init_depth_image)
             write_pfm(prob_map_path, out_prob_map)
