@@ -34,11 +34,11 @@ tf.app.flags.DEFINE_integer('ckpt_step', 135000,
 # input parameters
 tf.app.flags.DEFINE_integer('view_num', 5,
                             """Number of images (1 ref image and view_num - 1 view images).""")
-tf.app.flags.DEFINE_integer('max_d', 256, 
+tf.app.flags.DEFINE_integer('max_d', 128, 
                             """Maximum depth step when testing.""")
-tf.app.flags.DEFINE_integer('max_w', 1600, 
+tf.app.flags.DEFINE_integer('max_w', 1920, 
                             """Maximum image width when testing.""")
-tf.app.flags.DEFINE_integer('max_h', 1200, 
+tf.app.flags.DEFINE_integer('max_h', 1040, 
                             """Maximum image height when testing.""")
 tf.app.flags.DEFINE_float('sample_scale', 0.25, 
                             """Downsample scale for building cost volume (W and H).""")
@@ -196,6 +196,11 @@ def mvsnet_pipeline(mvs_list):
     elif FLAGS.regularization == 'GRU':
         init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
             depth_num, depth_start, depth_end, reg_type='GRU', inverse_depth=FLAGS.inverse_depth)
+    elif FLAGS.regularization == 'GRU_WGATE':
+
+        # probability volume
+        prob_volume = inference_prob_recurrent_wgate(
+            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
 
     # init option
     init_op = tf.global_variables_initializer()
