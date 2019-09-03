@@ -113,11 +113,11 @@ def fake_colmap_normal(in_depth_path, out_normal_path):
     write_gipuma_dmb(out_normal_path, normal_image)
     return 
 
-def mvsnet_to_gipuma(dense_folder, gipuma_point_folder):
+def mvsnet_to_gipuma(dense_folder, result_subfolder, gipuma_point_folder):
     
     image_folder = os.path.join(dense_folder, 'images')
     cam_folder = os.path.join(dense_folder, 'cams')
-    depth_folder = os.path.join(dense_folder, 'depths_mvsnet')
+    depth_folder = os.path.join(dense_folder, result_subfolder)
 
     gipuma_cam_folder = os.path.join(gipuma_point_folder, 'cams')
     gipuma_image_folder = os.path.join(gipuma_point_folder, 'images')
@@ -203,6 +203,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--dense_folder', type=str, default = '')
+    parser.add_argument('--result_subfolder', type=str, default = 'depths_mvsnet')
     parser.add_argument('--fusibile_exe_path', type=str, default = '/home/yoyo/Documents/software/fusibile/fusibile')
     parser.add_argument('--prob_threshold', type=float, default = '0.8')
     parser.add_argument('--disp_threshold', type=float, default = '0.25')
@@ -225,7 +226,7 @@ if __name__ == '__main__':
 
     # convert to gipuma format
     print ('Convert mvsnet output to gipuma input')
-    mvsnet_to_gipuma(dense_folder, point_folder)
+    mvsnet_to_gipuma(dense_folder, result_subfolder, point_folder)
 
     # depth map fusion with gipuma 
     print ('Run depth map fusion & filter')
