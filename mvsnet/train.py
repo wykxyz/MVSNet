@@ -306,6 +306,17 @@ def train(traning_list):
                         loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
                             mvsnet_classification_loss(
                                 prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+
+                    elif FLAGS.regularization == 'GRU_NONLOCALVIEWNUM':
+
+                        # probability volume
+                        prob_volume = inference_prob_recurrent_nonlocalviewnum(
+                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+
+                        # classification loss
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
                     
                     # retain the summaries from the final tower.
                     summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope)

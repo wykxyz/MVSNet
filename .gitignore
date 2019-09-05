@@ -1,13 +1,5 @@
-model/*
 model/
 tf_log/
-tf_log/*
-mvsnet/logs/
-mvsnet/model/
-mvsnet/tf_log/
-mvsnet/*log*
+logs/
 *pyc
 *log*
-mvsnet/*.pyc
-tools/*.pyc
-cnn_warper/*.pyc

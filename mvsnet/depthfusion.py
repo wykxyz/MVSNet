@@ -215,7 +215,7 @@ if __name__ == '__main__':
     prob_threshold = args.prob_threshold
     disp_threshold = args.disp_threshold
     num_consistent = args.num_consistent
-
+    result_subfolder = args.result_subfolder
     point_folder = os.path.join(dense_folder, 'points_mvsnet')
     if not os.path.isdir(point_folder):
         os.mkdir(point_folder)

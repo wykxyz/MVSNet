@@ -2,7 +2,7 @@
 n=4
 part=AD
 data=$(date +"%m%d")
-model=GRU_W
+model=GRU_NONLOCALVIEWNUM
 view=3
 max_d=128
 name=${data}_${n}_${model}_v${view}_d${max_d}
@@ -21,4 +21,4 @@ srun --mpi=pmi2 --gres=gpu:${n}  \
         --max_d=${max_d} \
         --log_dir=../tf_log/${name} \
         --model_dir=../model/${name} \
-        2>&1|tee ./logs/${name}-${now}.log &
+        2>&1|tee ../logs/${name}-${now}.log &
