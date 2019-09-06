@@ -29,5 +29,11 @@ class NonlocalNetForViewNum(Network):
         (self.feed('data')
         .non_local_viewdim3d(1, base_filter, relu=False,  bn=False, name='nonlocalviewdim3d')
         )
- 
+
+class NonlocalNetHW(Network):
+    def setup(self):
+        base_filter = 16
+        (self.feed('data')
+        .non_local_2d(1, base_filter, relu=False,  bn=False, name='nonlocalviewdim3d')
+        )
  

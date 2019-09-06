@@ -530,52 +530,56 @@ class Network(object):
         return tf.nn.sigmoid(input_tensor, name=name)
 
     @layer
-    def resnet_block(self, input_tensor, kernel_size, filters, dilation, name=None):
+    def resnet_block(self, input_tensor, kernel_size, filters, dilation, name=None): #WGATE_v1.0: use filters, kernel_size
         shortcut = input_tensor
 
-        inputs = self.conv(input_tensor, filters, kernel_size, 1, name=name + '/conv01', relu=False,
+        inputs = self.conv(input_tensor, kernel_size, filters, 1, name=name + '/conv01', relu=False,
                            dilation_rate=dilation[0])
         inputs = self.leaky_relu(inputs, name=name + '/leaky_relu')
-        inputs = self.conv(inputs, filters, kernel_size, 1, name=name + '/conv02', relu=False,
+        inputs = self.conv(inputs, kernel_size, filters, 1, name=name + '/conv02', relu=False,
                            dilation_rate=dilation[1])
         return inputs + shortcut
 
     @layer
-    def non_local(self, input_tensor, kernel_size, filters, relu=True, bn=False, name=None):
+    def non_local_2d(self, input_tensor, kernel_size, filters, relu=True, bn=False, name=None):
         x = input_tensor
-        batch_size = x.get_shape().as_list()[0]
-        channels = x.get_shape().as_list()[-1]
-        if bn:
-            f = self.conv_bn(x, filters, kernel_size, 1, name=name+'/conv01', relu=relu)
-        else:
-            f = self.conv(x, filters, kernel_size, 1, name=name+'/conv01', relu=relu)
-        f_x = tf.reshape(f, (batch_size, -1, filters))
+        channels = x.get_shape().as_list()[-1]        
+        shape = tf.shape(x)
+        batch_size = shape[0]
+        height = shape[1]
+        width = shape[2]
 
         if bn:
-            fi = self.conv_bn(x, filters, kernel_size, 1, name=name+'/conv02', relu=relu)
+            f = self.conv_bn(x, kernel_size, filters, 1, name=name+'/conv01', relu=relu)
         else:
-            fi = self.conv(x, filters, kernel_size, 1, name=name+'/conv02', relu=relu)
-        fi_x = tf.transpose(fi, [3, 0, 1, 2]).reshape(batch_size, filters, -1)
+            f = self.conv(x, kernel_size, filters, 1, name=name+'/conv01', relu=relu)
+        f_x = tf.reshape(f, [batch_size, -1, filters])
+
+        if bn:
+            fi = self.conv_bn(x, kernel_size, filters, 1, name=name+'/conv02', relu=relu)
+        else:
+            fi = self.conv(x, kernel_size, filters, 1, name=name+'/conv02', relu=relu)
+        fi_x = tf.reshape(tf.transpose(fi, [0, 3, 1, 2]), [batch_size, filters, -1])
        
         if bn:
-            g = self.conv_bn(x, filters, kernel_size, 1, name=name+'/conv03', relu=relu)
+            g = self.conv_bn(x, kernel_size, filters, 1, name=name+'/conv03', relu=relu)
         else:
-            g = self.conv(x, filters, kernel_size, 1, name=name+'/conv03', relu=relu)
-        g_x = tf.reshape(g, (batch_size, -1, filers))
+            g = self.conv(x, kernel_size, filters, 1, name=name+'/conv03', relu=relu)
+        g_x = tf.reshape(g, (batch_size, -1, filters))
  
         tmp = tf.matmul(f_x, fi_x)
-        N = tmp.get_shape().as_list()[-1]
+        #N = tmp.get_shape().as_list()[-1]
         #f_div_C = f / N #softmax
-        f_div_C = self.softmax(f, name=name+'/softmax')
-       
-        y = tf.matmul(f_div_C, g_x)
-        y = tf.reshape(y, [batch_size] + x.get_shape().as_list()[1:-1] + [self.inter_channels])
-        if bn:
-            w_y = self.conv_bn(y, channels, kernel_size, 1, name=name+'/conv04', relu=relu)
-        else:
-            w_y = self.conv(y, channels, kernel_size, 1, name=name+'/conv04', relu=relu)
+        f_div_C = self.softmax(tmp, name=name+'/softmax')
         
+        y = tf.matmul(f_div_C, g_x)
+        y = tf.reshape(y, [batch_size, height, width, channels])
+        if bn:
+            w_y = self.conv_bn(y, kernel_size, channels, 1, name=name+'/conv04', relu=relu)
+        else:
+            w_y = self.conv(y, kernel_size, channels, 1, name=name+'/conv04', relu=relu)
         z = w_y + x
+
         return z
 
     @layer
@@ -596,24 +600,25 @@ class Network(object):
         #print('tf shape: ', batch_size, height, width)
 
         #channels = x.get_shape().as_list()[-1]
-        x = tf.reshape(x, (view_num, batch_size, -1, channels))
+        x = tf.reshape(x, (view_num, batch_size, height*width, channels))
+
         if bn:
-            f = self.conv_bn(x, filters, kernel_size, 1, name=name+'/conv01', relu=relu)
+            f = self.conv_bn(x, kernel_size, filters, 1, name=name+'/conv01', relu=relu)
         else:
-            f = self.conv(x, filters, kernel_size, 1, name=name+'/conv01', relu=relu)
+            f = self.conv(x, kernel_size, filters, 1, name=name+'/conv01', relu=relu)
         f_x = tf.reshape(tf.transpose(f, [1,2,0,3]), (batch_size*height*width, view_num, filters))
 
         if bn:
-            fi = self.conv_bn(x, filters, kernel_size, 1, name=name+'/conv02', relu=relu)
+            fi = self.conv_bn(x, kernel_size, filters, 1, name=name+'/conv02', relu=relu)
         else:
-            fi = self.conv(x, filters, kernel_size, 1, name=name+'/conv02', relu=relu)
-        fi_x = tf.reshape(tf.transpose(f, [1,2,0,3]), (batch_size*height*width, filters, view_num))
+            fi = self.conv(x, kernel_size, filters, 1, name=name+'/conv02', relu=relu)
+        fi_x = tf.reshape(tf.transpose(fi, [1,2,3,0]), (batch_size*height*width, filters, view_num))
        
         if bn:
-            g = self.conv_bn(x, filters, kernel_size, 1, name=name+'/conv03', relu=relu)
+            g = self.conv_bn(x, kernel_size, filters, 1, name=name+'/conv03', relu=relu)
         else:
-            g = self.conv(x, filters, kernel_size, 1, name=name+'/conv03', relu=relu)
-        g_x = tf.reshape(tf.transpose(f, [1,2,0,3]), (batch_size*height*width, view_num, filters))
+            g = self.conv(x, kernel_size, filters, 1, name=name+'/conv03', relu=relu)
+        g_x = tf.reshape(tf.transpose(g, [1,2,0,3]), (batch_size*height*width, view_num, filters))
  
         tmp = tf.matmul(f_x, fi_x)
         #N = tmp.get_shape().as_list()[-1]
@@ -622,15 +627,21 @@ class Network(object):
         f_div_C = self.softmax(tmp, name=name+'/softmax')
        
         y = tf.matmul(f_div_C, g_x)
-        y = tf.reshape(y, [batch_size, -1, view_num, filters])
+        y = tf.reshape(y, [batch_size, height*width, view_num, filters])
         if bn:
-            w_y = self.conv_bn(y, channels, kernel_size, 1, name=name+'/conv04', relu=relu)
+            w_y = self.conv_bn(y, kernel_size, channels, 1, name=name+'/conv04', relu=relu)
         else:
-            w_y = self.conv(y, channels, kernel_size, 1, name=name+'/conv04', relu=relu)
+            w_y = self.conv(y, kernel_size, channels, 1, name=name+'/conv04', relu=relu)
         
         z = w_y + tf.transpose(x, [1, 2, 0, 3])
+        #print('z: ', tf.shape(z))
+        #print('z: ', z.get_shape().as_list())
+        #print(batch_size, height, width, channels)
 
-        z = self.max_pool(z, pool_size=[1, view_num], strides=1, name=name+'/maxpool')
+        #z = self.max_pool(z, pool_size=[1, view_num], strides=1, name=name+'/maxpool')
+        z = tf.reduce_max(z, axis=2)
+        #z = tf.nn.max_pooling2d(z, ksize=[1, view_num], strides=1, name=name+'/maxpool')
+        #print('z max pool:', z.get_shape().as_list())
         z = tf.reshape(z, [batch_size, height, width, channels])
         return z
 

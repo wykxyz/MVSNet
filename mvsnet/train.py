@@ -44,7 +44,7 @@ tf.app.flags.DEFINE_integer('ckpt_step', 0,
 tf.app.flags.DEFINE_integer('view_num', 3, 
                             """number of images (1 ref image and view_num - 1 view images).""")
 tf.app.flags.DEFINE_integer('max_d', 192, 
-                            """maximum depth step when training.""")
+                            """maximum depth step when training.""") # depth num
 tf.app.flags.DEFINE_integer('max_w', 640, 
                             """maximum image width when training.""")
 tf.app.flags.DEFINE_integer('max_h', 512, 
@@ -103,14 +103,14 @@ class MVSGenerator:
                 for view in range(self.view_num):
                     image = center_image(cv2.imread(data[2 * view]))
                     cam = load_cam(open(data[2 * view + 1]))
-                    cam[1][3][1] = cam[1][3][1] * FLAGS.interval_scale
+                    cam[1][3][1] = cam[1][3][1] * FLAGS.interval_scale # origin para * interval_scale
                     images.append(image)
                     cams.append(cam)
                 depth_image = load_pfm(open(data[2 * self.view_num]))
 
                 # mask out-of-range depth pixels (in a relaxed range)
-                depth_start = cams[0][1, 3, 0] + cams[0][1, 3, 1]
-                depth_end = cams[0][1, 3, 0] + (FLAGS.max_d - 2) * cams[0][1, 3, 1]
+                depth_start = cams[0][1, 3, 0] + cams[0][1, 3, 1] # interval
+                depth_end = cams[0][1, 3, 0] + (FLAGS.max_d - 2) * cams[0][1, 3, 1] #define max depth
                 depth_image = mask_depth_image(depth_image, depth_start, depth_end)
 
                 # return mvs input
@@ -119,7 +119,7 @@ class MVSGenerator:
                 images = np.stack(images, axis=0)
                 cams = np.stack(cams, axis=0)
                 print('Forward pass: d_min = %f, d_max = %f.' % \
-                    (cams[0][1, 3, 0], cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1]))
+                    (cams[0][1, 3, 0], cams[0][1, 3, 0] + (FLAGS.max_d - 1) * cams[0][1, 3, 1])) # 191*2.5*1.06 + 425
                 yield (images, cams, depth_image) 
 
                 # return backward mvs input for GRU
@@ -318,6 +318,17 @@ def train(traning_list):
                             mvsnet_classification_loss(
                                 prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
                     
+                    elif FLAGS.regularization == 'GRU_NONLOCALHW':
+
+                        # probability volume
+                        prob_volume = inference_prob_recurrent_nonlocalHW(
+                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+
+                        # classification loss
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+
                     # retain the summaries from the final tower.
                     summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope)
 

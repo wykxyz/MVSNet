@@ -245,8 +245,8 @@ def gen_dtu_resized_path(dtu_data_folder, mode='training'):
                     101, 102, 103, 104, 105, 107, 108, 109, 111, 112, 113, 115, 116, 119, 120,
                     121, 122, 123, 124, 125, 126, 127, 128]
     validation_set = [3, 5, 17, 21, 28, 35, 37, 38, 40, 43, 56, 59, 66, 67, 82, 86, 106, 117]
-    # training_set = [2, 6, 7]
-    # validation_set = [3, 5, 17]
+    #training_set = [2]
+    #validation_set = [3]
 
     data_set = []
     if mode == 'training':
