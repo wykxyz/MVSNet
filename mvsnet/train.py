@@ -186,7 +186,7 @@ def train(traning_list):
 
     if os.path.exists(FLAGS.log_dirs):
         print('remove ', FLAGS.log_dirs)
-        os.
+        os.rmdir(FLAGS.log_dirs)
     print('create ', FLAGS.log_dirs)
     os.makedirs(FLAGS.log_dirs)
     
