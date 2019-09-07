@@ -10,7 +10,7 @@ srun --mpi=pmi2 --gres=gpu:${n}  \
         python2 -u test.py \
         --regularization='GRU_NONLOCALVIEWNUM' \
         --model_dir=../model/0905_4_GRU_NONLOCALVIEWNUM_v3_d128_i1.06 \
-        --dense_folder=/mnt/lustre/share/yihongwei/dataset/mvs-test/family \
+        --dense_folder=/mnt/lustre/share/yihongwei/dataset/mvs-test/horse \
         --ckpt_step=135000 \
         --max_w=1920 \
         --max_h=1040 \

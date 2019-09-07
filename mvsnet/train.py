@@ -85,6 +85,8 @@ tf.app.flags.DEFINE_integer('snapshot', 5000,
                             """Step interval to save the model.""")
 tf.app.flags.DEFINE_float('gamma', 0.9,
                           """Learning rate decay rate.""")
+tf.app.flags.DEFINE_integer('num_cpu_core', 4,
+                          """num cpu core.""")
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -177,6 +179,22 @@ def average_gradients(tower_grads):
         average_grads.append(grad_and_var)
     return average_grads
 
+def next_device(use_cpu = True):
+    ''' See if there is available next device;
+        Args: use_cpu, global device_id
+        Return: new device id
+    '''
+  global device_id
+  if (use_cpu):
+    if ((device_id + 1) < FLAGS.num_cpu_core):
+      device_id += 1
+    device = '/cpu:%d' % device_id
+  else:
+    if ((device_id + 1) < FLAGS.num_gpu_core):
+      device_id += 1
+    device = '/gpu:%d' % device_id
+  return device
+
 def train(traning_list):
     """ training mvsnet """
     training_sample_size = len(traning_list)
@@ -194,7 +212,9 @@ def train(traning_list):
         print('create ', FLAGS.model_dir)
         os.makedirs(FLAGS.model_dir)
     
-    with tf.Graph().as_default(), tf.device('/cpu:0'): 
+
+    #with tf.Graph().as_default(), tf.device('/cpu:0'): 
+    with tf.Graph().as_default(), tf.device(next_device): 
 
         ########## data iterator #########
         # training generators
