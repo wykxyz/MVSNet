@@ -71,6 +71,12 @@ tf.app.flags.DEFINE_float('val_ratio', 0.2,
                           """Ratio of validation set when splitting dataset.""")
 tf.app.flags.DEFINE_float('base_lr', 0.001,
                           """Base learning rate.""")
+                          
+tf.app.flags.DEFINE_string('optimizer', 'ADAM',
+                          """Base learning rate.""")
+tf.app.flags.DEFINE_string('schedual', 'COSINE',
+                          """Base learning rate.""")
+
 tf.app.flags.DEFINE_integer('display', 1,
                             """Interval of loginfo display.""")
 tf.app.flags.DEFINE_integer('stepvalue', 10000,
@@ -199,9 +205,23 @@ def train(traning_list):
 
         ########## optimization options ##########
         global_step = tf.Variable(0, trainable=False, name='global_step')
-        lr_op = tf.train.exponential_decay(FLAGS.base_lr, global_step=global_step, 
-                                           decay_steps=FLAGS.stepvalue, decay_rate=FLAGS.gamma, name='lr')
-        opt = tf.train.RMSPropOptimizer(learning_rate=lr_op)
+        if FLAGS.schedual == "exp":
+            lr_op = tf.train.exponential_decay(FLAGS.base_lr, global_step=global_step, 
+                                               decay_steps=FLAGS.stepvalue, decay_rate=FLAGS.gamma, name='lr')
+        elif FLAGS.schedual == "cosine":
+            # lr_op = tf.train.cosine_decay(FLAGS.base_lr, global_step=global_step, 
+            #                                    decay_steps=FLAGS.stepvalue, alpha=1e-4, name='lr') #100,000
+            lr_op = tf.train.cosine_decay(FLAGS.base_lr, global_step=global_step, 
+                                                decay_steps=FLAGS.stepvalue, name='lr') #100,000
+                                                
+        elif FLAGS.schedual == "cosine_restart":
+            lr_op = tf.train.cosine_decay_restarts(FLAGS.base_lr, global_step=global_step, 
+                                               first_decay_steps=FLAGS.stepvalue, t_mul=2.0, m_mul=0.5, alpha=1e-4, name='lr')
+            
+        if FLAGS.optimizer == "rmsprop":
+            opt = tf.train.RMSPropOptimizer(learning_rate=lr_op)
+        elif FLAGS.optimizer == "adam":
+            opt = tf.train.AdamOptimizer(learning_rate=lr_op)
 
         tower_grads = []
         for i in xrange(FLAGS.num_gpus):
