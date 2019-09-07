@@ -29,7 +29,7 @@ from homography_warping import get_homographies, homography_warping
 # paths
 tf.app.flags.DEFINE_string('dtu_data_root', '/xdata/wuyk/mvs_training/dtu/', 
                            """Path to dtu dataset.""")
-tf.app.flags.DEFINE_string('log_dir', '/xdata/wuyk/tf_data4-validate/tf_log',
+tf.app.flags.DEFINE_string('log_dirs', '/xdata/wuyk/tf_data4-validate/tf_log', #tf1.14: log_dir define twice
                            """path to store the log.""")
 tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data4-validate/tf_model',
                            """path to save the model.""")
@@ -88,6 +88,7 @@ tf.app.flags.DEFINE_float('gamma', 0.9,
 
 
 FLAGS = tf.app.flags.FLAGS
+print('initial FLAGS---------------------------------------------\n')
 print(FLAGS)
 
 class MVSGenerator:
@@ -183,9 +184,12 @@ def train(traning_list):
         training_sample_size = training_sample_size * 2
     print ('sample number: ', training_sample_size)
 
-    if not os.path.exists(FLAGS.log_dir):
-        print('create ', FLAGS.log_dir)
-        os.makedirs(FLAGS.log_dir)
+    if os.path.exists(FLAGS.log_dirs):
+        print('remove ', FLAGS.log_dirs)
+        os.
+    print('create ', FLAGS.log_dirs)
+    os.makedirs(FLAGS.log_dirs)
+    
     if not os.path.exists(FLAGS.model_dir):
         print('create ', FLAGS.model_dir)
         os.makedirs(FLAGS.model_dir)
@@ -213,7 +217,7 @@ def train(traning_list):
             #                                    decay_steps=FLAGS.stepvalue, alpha=1e-4, name='lr') #100,000
             lr_op = tf.train.cosine_decay(FLAGS.base_lr, global_step=global_step, 
                                                 decay_steps=FLAGS.stepvalue, name='lr') #100,000
-                                                
+
         elif FLAGS.schedual == "cosine_restart":
             lr_op = tf.train.cosine_decay_restarts(FLAGS.base_lr, global_step=global_step, 
                                                first_decay_steps=FLAGS.stepvalue, t_mul=2.0, m_mul=0.5, alpha=1e-4, name='lr')
@@ -390,7 +394,7 @@ def train(traning_list):
             # initialization
             total_step = 0
             sess.run(init_op)
-            summary_writer = tf.summary.FileWriter(FLAGS.log_dir, sess.graph)
+            summary_writer = tf.summary.FileWriter(FLAGS.log_dirs, sess.graph)
 
             # load pre-trained model
             if FLAGS.use_pretrain:
@@ -447,7 +451,8 @@ def main(argv=None):  # pylint: disable=unused-argument
     # Shuffle
     random.shuffle(sample_list)
     # Training entrance.
-    #print(FLAGS)
+    print('Change FLAGS*********************************************\n')
+    print(FLAGS)
     train(sample_list)
 
 

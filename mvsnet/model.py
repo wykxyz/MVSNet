@@ -1053,11 +1053,30 @@ def inference_winner_take_all(images, cams, depth_num, depth_start, depth_end,
                 # print(feature_delta2.shape())
                 weight_f = tf.reduce_sum(feature_delta2, 3, keepdims=True)
                 # auto reuse
-                gate_w = Gatenet({'data': weight_f}, is_training=True, reuse=tf.AUTO_REUSE)
+                gate_w = Gatenet({'data': weight_f}, is_training=False, reuse=tf.AUTO_REUSE)
                 gate_w_delta = gate_w.get_output() + 1
                 ave_feature2 += tf.multiply(gate_w_delta, feature_delta2)
-
             cost = ave_feature2 / FLAGS.view_num
+        elif reg_type=='GRU_NONLOCALVIEWNUM':
+            ref_feature = ref_tower.get_output()
+            #print('ref fea: ', ref_feature.get_shape().as_list())
+            warped_view_feature_list = []
+            for view in range(0, FLAGS.view_num - 1):  # caculate average mean / homography from other image
+                homographies = view_homographies[view]
+                homographies = tf.transpose(homographies, perm=[1, 0, 2, 3])
+                homography = homographies[depth_index]
+                warped_view_feature = tf_transform_homography(view_towers[view].get_output(), homography)
+                feature_delta2 = tf.square(warped_view_feature - ref_feature)
+                warped_view_feature_list.append(feature_delta2)
+    
+            warped_view_features = tf.stack(warped_view_feature_list)
+            #print('len: ', len(warped_view_feature_list))
+            #print('debug in model: ', warped_view_features.get_shape().as_list())
+
+            cost = NonlocalNetForViewNum({'data': warped_view_features}, is_training=False, reuse=tf.AUTO_REUSE) # cost volume:
+            cost_volume = cost.get_output()
+            cost = cost_volume
+            #print('nolocal output: ', cost_volume.get_shape().as_list())
 
         cost.set_shape([FLAGS.batch_size, feature_shape[1], feature_shape[2], 32])
         # gru

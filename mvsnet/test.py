@@ -151,7 +151,7 @@ def mvsnet_pipeline(mvs_list):
 
     # create output folder
     tmp = time.strftime("%m%d%H%M%S", time.localtime())
-    output_folder = os.path.join(FLAGS.dense_folder, tmp + '_depths_mvsnet')
+    output_folder = os.path.join(FLAGS.dense_folder, tmp + 'step{0}_d{1}_is{2}_up{3}_depths_mvsnet'.format(FLAGS.ckpt_step, FLAGS.max_d, FLAGS.interval_scale, FLAGS.upsampling*2))
     if not os.path.isdir(output_folder):
         os.mkdir(output_folder)
 
@@ -195,7 +195,7 @@ def mvsnet_pipeline(mvs_list):
                 init_depth_map, ref_image, FLAGS.max_d, depth_start, depth_interval, True)
 
     # depth map inference using GRU
-    elif FLAGS.regularization == 'GRU' or FLAGS.regularization == 'GRU_WGATE':
+    elif FLAGS.regularization in ['GRU', 'GRU_WGATE', 'GRU_NONLOCALVIEWNUM'] :
         init_depth_map, prob_map = inference_winner_take_all(centered_images, scaled_cams, 
             depth_num, depth_start, depth_end, reg_type=FLAGS.regularization, inverse_depth=FLAGS.inverse_depth)
 
@@ -254,7 +254,7 @@ def mvsnet_pipeline(mvs_list):
             out_ref_cam_path = output_folder + ('/%08d.txt' % out_index)
 
             if FLAGS.upsampling:        
-                out_ref_image = cv2.resize(out_ref_image, (out_ref_image.shape[1] * 2, out_ref_image.shape[0] * 2))
+                out_ref_image = cv2.resize(out_ref_image, (out_ref_image.shape[1] * 4, out_ref_image.shape[0] * 4))
                 out_ref_cam[1, :2, :3] *= 2.0
                 out_init_depth_image = cv2.resize(out_init_depth_image, (out_ref_image.shape[1], out_ref_image.shape[0]))
                 out_prob_map = cv2.resize(out_prob_map, (out_ref_image.shape[1], out_ref_image.shape[0]))
