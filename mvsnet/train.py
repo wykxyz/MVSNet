@@ -198,8 +198,8 @@ def average_gradients(tower_grads):
 def train(traning_list):
     """ training mvsnet """
     training_sample_size = len(traning_list)
-    if FLAGS.regularization == 'GRU':
-        training_sample_size = training_sample_size * 2
+    # if FLAGS.regularization == 'GRU':
+    #     training_sample_size = training_sample_size * 2
     print ('sample number: ', training_sample_size)
 
     if os.path.exists(FLAGS.log_dirs):
