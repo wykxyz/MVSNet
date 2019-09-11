@@ -245,6 +245,19 @@ def gen_dtu_resized_path(dtu_data_folder, mode='training'):
                     101, 102, 103, 104, 105, 107, 108, 109, 111, 112, 113, 115, 116, 119, 120,
                     121, 122, 123, 124, 125, 126, 127, 128]
     validation_set = [3, 5, 17, 21, 28, 35, 37, 38, 40, 43, 56, 59, 66, 67, 82, 86, 106, 117]
+    #validation_set = [3,]
+    # ADD by hongweiyi
+    evaluation_set = [1, 4, 9, 10, 11, 12, 13, 15, 23, 24, 29, 32, 33, 34, 48, 49, 62, 75, 77,  
+                      110, 114, 118]
+
+    # for each dataset
+    data_set = []
+    if mode == 'training':
+        data_set = training_set
+    elif mode == 'validation':
+        data_set = validation_set
+    elif mode == 'evaluation':
+        data_set = evaluation_set
     #training_set = [2]
     #validation_set = [3]
 
@@ -286,7 +299,7 @@ def gen_dtu_resized_path(dtu_data_folder, mode='training'):
                     depth_image_path = os.path.join(depth_folder, ('depth_map_%04d.pfm' % ref_index))
                     paths.append(depth_image_path)
                     sample_list.append(paths)
-        elif mode == 'validation':
+        elif mode == 'validation' or mode == 'evaluation':
             j = 3
             # for each reference image
             for p in range(0, int(cluster_list[0])):

@@ -2,7 +2,7 @@
 n=4
 part=AD
 data=$(date +"%m%d")
-model=GRU_NONLOCALVIEWNUM
+model=GRU_W
 #model=GRU_WGATE
 #model=GRU_NONLOCALHW
 view=3
@@ -11,7 +11,7 @@ max_d=128
 optimizer=adam
 schedual=cosine
 base_lr=1e-3
-stepvalue=140000
+stepvalue=150000
 interval_scale=1.56
 name=${data}_${n}_${model}_v${view}_d${max_d}_i${interval_scale}_opti${optimizer}_lrdecay${schedual}_lr${base_lr}_step${stepvalue}
 now=$(date +"%Y%m%d_%H%M%S")

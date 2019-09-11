@@ -31,6 +31,10 @@ tf.app.flags.DEFINE_string('model_dir',
 tf.app.flags.DEFINE_integer('ckpt_step', 135000,
                             """ckpt step.""")
 
+# save parameters
+tf.app.flags.DEFINE_string('save_folder', '/mnt/lustre/share/yihongwei/dataset/mvs-test_results', 
+                           """Root path to dense folder.""")
+                           
 # input parameters
 tf.app.flags.DEFINE_integer('view_num', 5,
                             """Number of images (1 ref image and view_num - 1 view images).""")
@@ -52,6 +56,9 @@ tf.app.flags.DEFINE_bool('adaptive_scaling', True,
                             """Let image size to fit the network, including 'scaling', 'cropping'""")
 tf.app.flags.DEFINE_bool('upsampling', False, 
                             """Upsample prob depth map twice """)
+tf.app.flags.DEFINE_integer('upsampling_scale', 2, 
+                            """Testing batch size.""")
+
 # network architecture
 tf.app.flags.DEFINE_string('regularization', 'GRU',
                            """Regularization method, including '3DCNNs' and 'GRU'""")
@@ -61,6 +68,10 @@ tf.app.flags.DEFINE_bool('inverse_depth', True,
                            """Whether to apply inverse depth for R-MVSNet""")
 
 FLAGS = tf.app.flags.FLAGS
+
+#Debug
+debug = False
+count = 0
 
 class MVSGenerator:
     """ data generator class, tf only accept generator without param """
@@ -120,14 +131,22 @@ class MVSGenerator:
                     resize_scale = h_scale
                     if w_scale > h_scale:
                         resize_scale = w_scale
-                scaled_input_images, scaled_input_cams = scale_mvs_input(images, cams, scale=resize_scale)
-
+                
+                scaled_input_images, scaled_input_cams = scale_mvs_input(images, cams, scale=resize_scale) #use large side as scale
+                if debug:
+                    print('resize', resize_scale)
                 # crop to fit network
                 croped_images, croped_cams = crop_mvs_input(scaled_input_images, scaled_input_cams)
 
                 # center images
                 centered_images = []
                 for view in range(self.view_num):
+                    if debug:
+                        global count
+                        tmp_img = croped_images[view]
+                        cv2.imwrite('{}_debug.png'.format(count), tmp_img)
+                        print('imwrite debug ', count, ' image')
+                        count += 1
                     centered_images.append(center_image(croped_images[view]))
 
                 # sample cameras for building cost volume
@@ -150,10 +169,17 @@ def mvsnet_pipeline(mvs_list):
     print ('sample number: ', len(mvs_list))
 
     # create output folder
+    model_keys = str.split(FLAGS.model_dir, '/')
+    model_key = model_keys[-1] + '.' + FLAGS.regularization
+    print('print', model_key)
+    dataset_name = str.split(FLAGS.dense_folder, '/')[-1]
+    print('name, ', dataset_name)
     tmp = time.strftime("%m%d%H%M%S", time.localtime())
-    output_folder = os.path.join(FLAGS.dense_folder, tmp + 'step{0}_d{1}_is{2}_up{3}_depths_mvsnet'.format(FLAGS.ckpt_step, FLAGS.max_d, FLAGS.interval_scale, FLAGS.upsampling*2))
+    output_folder = os.path.join(FLAGS.save_folder+'/'+model_key, tmp + 'step{0}_d{1}_is{2}_up{3}_{4}' 
+                        .format(FLAGS.ckpt_step, FLAGS.max_d, FLAGS.interval_scale, FLAGS.upsampling_scale, dataset_name))
+    print('save', output_folder)
     if not os.path.isdir(output_folder):
-        os.mkdir(output_folder)
+        os.makedirs(output_folder)
 
     # testing set
     mvs_generator = iter(MVSGenerator(mvs_list, FLAGS.view_num))
@@ -254,8 +280,8 @@ def mvsnet_pipeline(mvs_list):
             out_ref_cam_path = output_folder + ('/%08d.txt' % out_index)
 
             if FLAGS.upsampling:        
-                out_ref_image = cv2.resize(out_ref_image, (out_ref_image.shape[1] * 4, out_ref_image.shape[0] * 4))
-                out_ref_cam[1, :2, :3] *= 2.0
+                out_ref_image = cv2.resize(out_ref_image, (out_ref_image.shape[1] * FLAGS.upsampling_scale, out_ref_image.shape[0] * FLAGS.upsampling_scale))
+                out_ref_cam[1, :2, :3] *= 1.0 * FLAGS.upsampling_scale
                 out_init_depth_image = cv2.resize(out_init_depth_image, (out_ref_image.shape[1], out_ref_image.shape[0]))
                 out_prob_map = cv2.resize(out_prob_map, (out_ref_image.shape[1], out_ref_image.shape[0]))
      

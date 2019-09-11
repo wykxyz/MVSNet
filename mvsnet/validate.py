@@ -35,15 +35,15 @@ tf.app.flags.DEFINE_string('model_dir', '/xdata/wuyk/tf_data4-validate/tf_model'
                            """path to save the model.""")
 tf.app.flags.DEFINE_boolean('train_dtu', True, 
                             """whether to train.""")
-tf.app.flags.DEFINE_boolean('use_pretrain', False, 
+tf.app.flags.DEFINE_string('mode', 'validation', 
                             """whether to train.""")
 tf.app.flags.DEFINE_integer('ckpt_step', 0,
                             """ckpt step.""")
 
 # input parameters
-tf.app.flags.DEFINE_integer('view_num', 3, 
+tf.app.flags.DEFINE_integer('view_num', 5, 
                             """number of images (1 ref image and view_num - 1 view images).""")
-tf.app.flags.DEFINE_integer('max_d', 192, 
+tf.app.flags.DEFINE_integer('max_d', 256, 
                             """maximum depth step when training.""") # depth num
 tf.app.flags.DEFINE_integer('max_w', 640, 
                             """maximum image width when training.""")
@@ -58,35 +58,21 @@ tf.app.flags.DEFINE_float('interval_scale', 1.06,
 tf.app.flags.DEFINE_string('regularization', 'gru',
                            """regularization method.""")
 tf.app.flags.DEFINE_boolean('refinement', False,
-                           """whether to apply depth map refinement for 3dcnns""")
+                           """Whether to apply depth map refinement for MVSNet""")
+tf.app.flags.DEFINE_bool('inverse_depth', True,
+                           """Whether to apply inverse depth for R-MVSNet""")
 
 # training parameters
 tf.app.flags.DEFINE_integer('num_gpus', 1, 
                             """Number of GPUs.""")
 tf.app.flags.DEFINE_integer('batch_size', 1, 
                             """Training batch size.""")
-tf.app.flags.DEFINE_integer('epoch', 6, 
+tf.app.flags.DEFINE_integer('epoch', 1, 
                             """Training epoch number.""")
-tf.app.flags.DEFINE_float('val_ratio', 0.2, 
-                          """Ratio of validation set when splitting dataset.""")
-tf.app.flags.DEFINE_float('base_lr', 0.001,
-                          """Base learning rate.""")
-                          
-tf.app.flags.DEFINE_string('optimizer', 'ADAM',
-                          """Base learning rate.""")
-tf.app.flags.DEFINE_string('schedual', 'COSINE',
-                          """Base learning rate.""")
-
-tf.app.flags.DEFINE_integer('display', 1,
-                            """Interval of loginfo display.""")
-tf.app.flags.DEFINE_integer('stepvalue', 10000,
-                            """Step interval to decay learning rate.""")
-tf.app.flags.DEFINE_integer('snapshot', 5000,
-                            """Step interval to save the model.""")
-tf.app.flags.DEFINE_float('gamma', 0.9,
-                          """Learning rate decay rate.""")
 # tf.app.flags.DEFINE_integer('num_cpu_core', 4,
 #                           """num cpu core.""")
+tf.app.flags.DEFINE_integer('display', 1,
+                            """Interval of loginfo display.""")
 
 
 FLAGS = tf.app.flags.FLAGS
@@ -179,42 +165,24 @@ def average_gradients(tower_grads):
         average_grads.append(grad_and_var)
     return average_grads
 
-# def next_device(use_cpu = True):
-#     ''' See if there is available next device;
-#         Args: use_cpu, global device_id
-#         Return: new device id
-#     '''
-#   global device_id
-#   if (use_cpu):
-#     if ((device_id + 1) < FLAGS.num_cpu_core):
-#       device_id += 1
-#     device = '/cpu:%d' % device_id
-#   else:
-#     if ((device_id + 1) < FLAGS.num_gpu_core):
-#       device_id += 1
-#     device = '/gpu:%d' % device_id
-#   return device
-
 def train(traning_list):
     """ training mvsnet """
     training_sample_size = len(traning_list)
-    if FLAGS.regularization == 'GRU':
-        training_sample_size = training_sample_size * 2
-    print ('sample number: ', training_sample_size)
+    # if FLAGS.regularization == 'GRU': #Why
+    #     training_sample_size = training_sample_size * 2
+    # print ('sample number: ', training_sample_size)
 
     if os.path.exists(FLAGS.log_dirs):
         print('remove ', FLAGS.log_dirs)
-        os.rmdir(FLAGS.log_dirs)
+        os.rmdir(FLAGS.log_dirs) #os.removedirs
     print('create ', FLAGS.log_dirs)
     os.makedirs(FLAGS.log_dirs)
     
     if not os.path.exists(FLAGS.model_dir):
         print('create ', FLAGS.model_dir)
         os.makedirs(FLAGS.model_dir)
-    
 
     with tf.Graph().as_default(), tf.device('/cpu:0'): 
-    #with tf.Graph().as_default(), tf.device(next_device): 
 
         ########## data iterator #########
         # training generators
@@ -227,27 +195,7 @@ def train(traning_list):
         # iterators
         training_iterator = training_set.make_initializable_iterator()
 
-        ########## optimization options ##########
-        global_step = tf.Variable(0, trainable=False, name='global_step')
-        if FLAGS.schedual == "exp":
-            lr_op = tf.train.exponential_decay(FLAGS.base_lr, global_step=global_step, 
-                                               decay_steps=FLAGS.stepvalue, decay_rate=FLAGS.gamma, name='lr')
-        elif FLAGS.schedual == "cosine":
-            # lr_op = tf.train.cosine_decay(FLAGS.base_lr, global_step=global_step, 
-            #                                    decay_steps=FLAGS.stepvalue, alpha=1e-4, name='lr') #100,000
-            lr_op = tf.train.cosine_decay(FLAGS.base_lr, global_step=global_step, 
-                                                decay_steps=FLAGS.stepvalue, name='lr') #100,000
-
-        elif FLAGS.schedual == "cosine_restart":
-            lr_op = tf.train.cosine_decay_restarts(FLAGS.base_lr, global_step=global_step, 
-                                               first_decay_steps=FLAGS.stepvalue, t_mul=2.0, m_mul=0.5, alpha=1e-4, name='lr')
-            
-        if FLAGS.optimizer == "rmsprop":
-            opt = tf.train.RMSPropOptimizer(learning_rate=lr_op)
-        elif FLAGS.optimizer == "adam":
-            opt = tf.train.AdamOptimizer(learning_rate=lr_op)
-
-        tower_grads = []
+        tower_maes = []
         for i in xrange(FLAGS.num_gpus):
             with tf.device('/gpu:%d' % i):
                 with tf.name_scope('Model_tower%d' % i) as scope:
@@ -260,7 +208,8 @@ def train(traning_list):
                         tf.slice(cams, [0, 0, 1, 3, 0], [FLAGS.batch_size, 1, 1, 1, 1]), [FLAGS.batch_size])
                     depth_interval = tf.reshape(
                         tf.slice(cams, [0, 0, 1, 3, 1], [FLAGS.batch_size, 1, 1, 1, 1]), [FLAGS.batch_size])
-
+                    #depth_interval_numpy = depth_interval.eval()
+                    print('depth_interval: ', depth_interval)
                     is_master_gpu = False
                     if i == 0:
                         is_master_gpu = True
@@ -287,7 +236,7 @@ def train(traning_list):
                         loss1, less_one_accuracy, less_three_accuracy = mvsnet_regression_loss(
                             refined_depth_map, depth_image, depth_interval)
                         loss = (loss0 + loss1) / 2
-                        mae = loss1
+                        mae = loss1 
                     elif FLAGS.regularization == '3DCNNs_W':
 
                         # initial depth map
@@ -309,12 +258,26 @@ def train(traning_list):
                         loss1, less_one_accuracy, less_three_accuracy = mvsnet_regression_loss(
                             refined_depth_map, depth_image, depth_interval)
                         loss = (loss0 + loss1) / 2
-                        mae = loss1 # refined depth map
+                        mae = loss1 
+
                     elif FLAGS.regularization == 'GRU':
 
                         # probability volume
+                        #prob_volume = inference_prob_recurrent_wori(
+                        #    images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+                        prob_volume = inference_prob_recurrent(
+                           images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+                        
+
+                        # classification loss
+                        loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
+                            mvsnet_classification_loss(
+                                prob_volume, depth_image, FLAGS.max_d, depth_start, depth_interval)
+                    elif FLAGS.regularization == 'GRU_WORI':
+
+                        # probability volume
                         prob_volume = inference_prob_recurrent_wori(
-                            images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)
+                           images, cams, FLAGS.max_d, depth_start, depth_interval, is_master_gpu)                        
 
                         # classification loss
                         loss, mae, less_one_accuracy, less_three_accuracy, depth_map = \
@@ -377,29 +340,18 @@ def train(traning_list):
                     # retain the summaries from the final tower.
                     summaries = tf.get_collection(tf.GraphKeys.SUMMARIES, scope)
 
-                    # calculate the gradients for the batch of data on this CIFAR tower.
-                    grads = opt.compute_gradients(loss)
+                    tower_maes.append(mae)
 
-                    # keep track of the gradients across all towers.
-                    tower_grads.append(grads)
-        
-        # average gradient
-        grads = average_gradients(tower_grads)
-        
-        # training opt
-        train_opt = opt.apply_gradients(grads, global_step=global_step)
+        #if FLAGS.regularization not in ['3DCNNs_W', '3DCNNs']:
+        tower_maes = tf.concat(axis=0, values=tower_maes)
+        average_maes = tf.reduce_mean(tower_maes)
+        summaries.append(tf.summary.scalar('mae', mae))
+        summaries.append(tf.summary.scalar('average_maes', average_maes))
 
-        # summary 
+        # summary
         summaries.append(tf.summary.scalar('loss', loss))
         summaries.append(tf.summary.scalar('less_one_accuracy', less_one_accuracy))
         summaries.append(tf.summary.scalar('less_three_accuracy', less_three_accuracy))
-        summaries.append(tf.summary.scalar('lr', lr_op))
-        weights_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        for var in weights_list:
-            summaries.append(tf.summary.histogram(var.op.name, var))
-        for grad, var in grads:
-            if grad is not None:
-                summaries.append(tf.summary.histogram(var.op.name + '/gradients', grad))
         
         # saver
         saver = tf.train.Saver(tf.global_variables(), max_to_keep=None)        
@@ -407,68 +359,70 @@ def train(traning_list):
 
         # initialization option
         init_op = tf.global_variables_initializer()
+        var_init_op = tf.local_variables_initializer()
+        # GPU grows incrementally
         config = tf.ConfigProto(allow_soft_placement = True)
         config.gpu_options.allow_growth = True
 
         with tf.Session(config=config) as sess:     
             
             # initialization
-            total_step = 0
+            # initialization
+            sess.run(var_init_op)
             sess.run(init_op)
+            total_step = 0
+
             summary_writer = tf.summary.FileWriter(FLAGS.log_dirs, sess.graph)
 
-            # load pre-trained model
-            if FLAGS.use_pretrain:
-                pretrained_model_path = os.path.join(FLAGS.model_dir, FLAGS.regularization, 'model.ckpt')
+            # load model
+            if FLAGS.model_dir is not None:
+                pretrained_model_ckpt_path = os.path.join(FLAGS.model_dir, FLAGS.regularization, 'model.ckpt') 
                 restorer = tf.train.Saver(tf.global_variables())
-                restorer.restore(sess, '-'.join([pretrained_model_path, str(FLAGS.ckpt_step)]))
+                restorer.restore(sess, '-'.join([pretrained_model_ckpt_path, str(FLAGS.ckpt_step)]))
                 print(Notify.INFO, 'Pre-trained model restored from %s' %
-                    ('-'.join([pretrained_model_path, str(FLAGS.ckpt_step)])), Notify.ENDC)
+                    ('-'.join([pretrained_model_ckpt_path, str(FLAGS.ckpt_step)])), Notify.ENDC)
                 total_step = FLAGS.ckpt_step
 
-            # training several epochs
-            for epoch in range(FLAGS.epoch):
+            # Evaluate of one epoch
+            epoch = FLAGS.epoch
+            step = 0
+            #TODO: define mean averge error
+            total_average_mae = 0
+            sess.run(training_iterator.initializer)
+            for _ in range(int(training_sample_size / FLAGS.num_gpus)):
 
-                # training of one epoch
-                step = 0
-                sess.run(training_iterator.initializer)
-                for _ in range(int(training_sample_size / FLAGS.num_gpus)):
+                # run one batch
+                start_time = time.time()
+                try:
+                    out_summary_op, out_average_maes, out_loss, out_less_one, out_less_three = sess.run(
+                    [summary_op, average_maes, loss, less_one_accuracy, less_three_accuracy])
+                except tf.errors.OutOfRangeError:
+                    print("End of dataset")  # ==> "End of dataset"
+                    break
+                duration = time.time() - start_time
 
-                    # run one batch
-                    start_time = time.time()
-                    try:
-                        out_summary_op, out_opt, out_loss, out_less_one, out_less_three = sess.run(
-                        [summary_op, train_opt, loss, less_one_accuracy, less_three_accuracy])
-                    except tf.errors.OutOfRangeError:
-                        print("End of dataset")  # ==> "End of dataset"
-                        break
-                    duration = time.time() - start_time
+                total_average_mae += out_average_maes
+                # print info
+                if step % FLAGS.display == 0:
+                    print(Notify.INFO,
+                        'epoch, %d, step %d, total_step %d, total_average_mae = %.4f, out_average_maes = %.4f, loss = %.4f, (< 1px) = %.4f, (< 3px) = %.4f (%.3f sec/step)'
+                        % (epoch, step, total_step, total_average_mae, out_average_maes,out_loss, out_less_one, out_less_three, duration), Notify.ENDC)
+                
+                # write summary
+                if step % (FLAGS.display * 10) == 0:
+                    summary_writer.add_summary(out_summary_op, total_step)
+                
+                step += FLAGS.batch_size * FLAGS.num_gpus
+                total_step += FLAGS.batch_size * FLAGS.num_gpus
 
-                    # print info
-                    if step % FLAGS.display == 0:
-                        print(Notify.INFO,
-                            'epoch, %d, step %d, total_step %d, loss = %.4f, (< 1px) = %.4f, (< 3px) = %.4f (%.3f sec/step)' %
-                            (epoch, step, total_step, out_loss, out_less_one, out_less_three, duration), Notify.ENDC)
-                    
-                    # write summary
-                    if step % (FLAGS.display * 10) == 0:
-                        summary_writer.add_summary(out_summary_op, total_step)
-                   
-                    # save the model checkpoint periodically
-                    if (total_step % FLAGS.snapshot == 0 or step == (training_sample_size - 1)):
-                        model_folder = os.path.join(FLAGS.model_dir, FLAGS.regularization)
-                        if not os.path.exists(model_folder):
-                            os.makedirs(model_folder)
-                        ckpt_path = os.path.join(model_folder, 'model.ckpt')
-                        print(Notify.INFO, 'Saving model to %s' % ckpt_path, Notify.ENDC)
-                        saver.save(sess, ckpt_path, global_step=total_step)
-                    step += FLAGS.batch_size * FLAGS.num_gpus
-                    total_step += FLAGS.batch_size * FLAGS.num_gpus
+            mean_total_average_mae = total_average_mae / step
+            print(Notify.INFO,'step %d, total_step %d, total_average_mae = %.4f, mean_total_average_mae = %.4f' % 
+                (step, total_step, total_average_mae, mean_total_average_mae), Notify.ENDC)
 
 def main(argv=None):  # pylint: disable=unused-argument
     """ program entrance """
     # Prepare all training samples
-    sample_list = gen_dtu_resized_path(FLAGS.dtu_data_root)
+    sample_list = gen_dtu_resized_path(FLAGS.dtu_data_root, FLAGS.mode)
     # Shuffle
     random.shuffle(sample_list)
     # Training entrance.
