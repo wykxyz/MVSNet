@@ -330,7 +330,7 @@ if __name__ == '__main__':
             [0, 0, 1]
         ])
         intrinsic[camera_id] = i
-    print('intrinsic[1]\n', intrinsic[1], end='\n\n')
+    print('intrinsic[0]\n', intrinsic[0], end='\n\n')
 
     # extrinsic
     extrinsic = {}
