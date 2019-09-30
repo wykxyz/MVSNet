@@ -46,6 +46,7 @@ def load_pfm(file):
 path_all=os.listdir('/home/yanjianfeng/data/wu-ETH3D-training/ETH3D_results/')
 print(path_all)
 Tsum=0
+Max=0
 for path in path_all:
     sum=0
     file1='/home/yanjianfeng/data/wu-ETH3D-training/ETH3D_results/'+path+'/gt_depth'
@@ -55,13 +56,37 @@ for path in path_all:
     for i in range(num):
         file2=open('/home/yanjianfeng/data/wu-ETH3D-training/ETH3D_results/'+path+'/gt_depth'+'/%08d_init.pfm'%i)
         data2=load_pfm(file2)
+        ##print "data2"
+        ##print data2
         ##im2=np.load(file2)
         ##print im2.shape
         file3=open('/home/yanjianfeng/data/wu-ETH3D-training/ETH3D/'+path+'/depths_mvsnet'+'/%08d_init.pfm'%i)
         data3=load_pfm(file3)
+        ##print "data3"
+        ##print data3
         ##im3=np.load(file3)
-        ##print im3.shape
-        mask=(data2>0.5)&(data2<10)
+        ##print im3.shapie
+        """
+        width,height=data2.shape
+        for x in range(width):
+            for y in range(height):
+                np.where(np.isnan(data2,0.0,data2[x][y])
+        """
+        data2=np.where(np.isnan(data2),0.0,data2)
+        ###print "*****"
+        ###print data2.mean()
+        mask=(data2>0.0)&(data2<3.12)
+        print "++"
+        print np.max(data2), np.min(data2)
+        print "+++++"
+        Max=max(np.max(data2),Max)
+        """
+        if np.isnan(data2[mask].mean()):
+            print "//////"
+            print data2
+            exit(0)
+        """
+        ##print mask
         print(str(path)+' '+str(i)+' '+str(abs(data2[mask]-data3[mask]).mean()))
         sum+=abs(data2[mask]-data3[mask]).mean()
     sum=sum/num
@@ -69,3 +94,4 @@ for path in path_all:
     Tsum+=sum
 Tsum=Tsum/13.0
 print('all ' + str(Tsum))
+##print Max
