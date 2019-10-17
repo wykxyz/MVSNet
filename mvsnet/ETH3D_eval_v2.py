@@ -80,6 +80,8 @@ for i in range(total_num):
     scale=open(scale_result+'%08d.txt'%i).read()
     scale_float=float(scale)
     mask=(tgt_depth<=maxdepth)&(tgt_depth>mindepth)&(tgt_depth==tgt_depth)
+    ##tgt_depth_=np.squeeze(tgt_depth)   (1,544,832)->(544,832)
+    ##pred_=np.squeeze(pred)
     abs_rel_temp,abs_diff_temp,sq_rel_temp,rmse_temp,rmse_log_temp,a1_temp,a2_temp,a3_temp=compute_errors_test(tgt_depth[mask]/scale_float, pred[mask]/scale_float)
     abs_rel_tot+=abs_rel_temp; abs_diff_tot+=abs_diff_temp; sq_rel_tot+=sq_rel_temp;rmse_tot+=rmse_temp; rmse_log_tot+=rmse_temp; a1_tot+=a1_temp; a2_tot+=a2_temp; a3_tot+=a3_temp
 
